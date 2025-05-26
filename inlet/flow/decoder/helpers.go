@@ -168,10 +168,23 @@ func ParseEthernet(sch *schema.Component, bf *schema.FlowMessage, data []byte) u
 	return 0
 }
 
-// DecodeIP decodes an IP address
+// DecodeIP decodes an IP address. Looks at /etc/host on the local machine
 func DecodeIP(b []byte) netip.Addr {
 	if ip, ok := netip.AddrFromSlice(b); ok {
 		return netip.AddrFrom16(ip.As16())
 	}
 	return netip.Addr{}
+}
+
+func Hostname(netip netip.Addr) string
+{
+	ip = netip.String()
+    names, err:= net.LookupAddr(ip)
+    if err == nil {
+        fmt.Println(names)
+        // get only the first hostname 
+        host = names[0]
+        return host
+    }
+    return "Unknown"
 }

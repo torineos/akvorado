@@ -173,6 +173,10 @@ const (
 	ColumnMPLS3rdLabel
 	ColumnMPLS4thLabel
 
+	// Added here for hostname resolution
+	ColumnSrcHostname
+	ColumnDstHostname
+
 	// ColumnLast points to after the last static column, custom dictionaries
 	// (dynamic columns) come after ColumnLast
 	ColumnLast
@@ -569,6 +573,13 @@ END`,
 				ClickHouseType:     "UInt32",
 				ClickHouseAlias:    "MPLSLabels[4]",
 				ParserType:         "uint",
+			},
+			{
+				Key:                ColumnSrcHostname,
+				Disabled: 			true,
+				ParserType:         "string",
+				ClickHouseType:     "LowCardinality(String)",
+				ClickHouseMainOnly: true,
 			},
 		},
 	}.finalize()

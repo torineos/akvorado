@@ -331,6 +331,8 @@ output provider */ = 'telia'`,
 		{Input: `MPLS1stLabel = 76876`, Output: `MPLS1stLabel = 76876`, MetaOut: Meta{MainTableRequired: true}},
 		{Input: `MPLS2ndLabel > 76876`, Output: `MPLS2ndLabel > 76876`, MetaOut: Meta{MainTableRequired: true}},
 		{Input: `MPLS3rdLabel < 76876`, Output: `MPLS3rdLabel < 76876`, MetaOut: Meta{MainTableRequired: true}},
+		{Input: `SrcHostname = 'something'`, Output: `SrcHostname = 'something'`},
+		{Input: `DstHostname = 'something'`, Output: `DstHostname = 'something'`},
 	}
 	config := schema.DefaultConfiguration()
 	config.CustomDictionaries = make(map[string]schema.CustomDict)
@@ -443,6 +445,18 @@ func TestInvalidFilter(t *testing.T) {
 		{Input: `SrcMAC = 00:11:22:33:44:55:66`, EnableAll: true},
 		{Input: `SrcAddrDimensionAttribute = 8`},
 		{Input: `InvalidDimensionAttribute = "Test"`},
+		{Input: `SrcHostname`},
+		{Input: `SrcHostname = `},
+		{Input: `SrcHostname = 'something`},
+		{Input: `SrcHostname='something"`},
+		{Input: `SrcHostname="something"`},
+		{Input: `SrcHostname>"something"`},
+		{Input: `DstHostname`},
+		{Input: `DstHostname = `},
+		{Input: `DstHostname = 'something`},
+		{Input: `DstHostname='something"`},
+		{Input: `DstHostname="something"`},
+		{Input: `DstHostname>"something"`},
 	}
 	config := schema.DefaultConfiguration()
 	config.CustomDictionaries = make(map[string]schema.CustomDict)

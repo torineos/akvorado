@@ -66,3 +66,8 @@ func TestDecodeVLANAndIPv6(t *testing.T) {
 		t.Fatalf("ParseEthernet() (-got, +want):\n%s", diff)
 	}
 }
+
+// ADD TESTING FOR HOSTNAME FUNCTION TO GOOGLE DNS
+func TestRetrieveHost() {
+	
+}
