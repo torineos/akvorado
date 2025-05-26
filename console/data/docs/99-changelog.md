@@ -13,9 +13,11 @@ identified with a specific icon:
 
 ## Unreleased
 
+- 🩹 *console*: fix deletion of saved filters
 - 🩹 *docker*: move healthcheck for IPinfo updater into Dockerfile to avoid
   "unhealthy" state on non-updated installation
 - 🌱 *docker*: enable access log for Traefik
+- 🌱 *inlet*: improve performance of classifiers
 
 ## 1.11.5 - 2025-05-11
 
