@@ -67,7 +67,13 @@ func TestDecodeVLANAndIPv6(t *testing.T) {
 	}
 }
 
-// ADD TESTING FOR HOSTNAME FUNCTION TO GOOGLE DNS
-func TestRetrieveHost() {
-	
+// ADD TESTING FOR HOSTNAME FUNCTION TO WELL KNOWN DNS ADDRESS
+func TestRetrieveHostIPV4(t *testing.T) {
+	// Take into account when it doesn't resolve and actually returns something without breaking
+	expected:= 
+}
+
+func TestRetrieveHostIPV6(t *testing.T) {
+	// Take into account when it doesn't resolve and actually returns something without breaking
+	expected:=
 }
