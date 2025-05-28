@@ -6,6 +6,7 @@ package decoder
 import (
 	"encoding/binary"
 	"net/netip"
+	"net"
 
 	"akvorado/common/helpers"
 	"akvorado/common/schema"
@@ -176,15 +177,16 @@ func DecodeIP(b []byte) netip.Addr {
 	return netip.Addr{}
 }
 
+// Hostname returns the FQDN of an IP address. Looks at /etc/host on the local machine
 func Hostname(netip netip.Addr) string
 {
-	ip = netip.String()
-    names, err:= net.LookupAddr(ip)
-    if err == nil {
-        fmt.Println(names)
-        // get only the first hostname 
-        host = names[0]
-        return host
-    }
-    return "Unknown"
+	var host string
+	names, err := net.LookupAddr(netip.String())
+	if err == nil {
+		// get only the first hostname, since most of the case it is the most relevant
+		host = names[0]
+		return host
+	}
+	// if no host is returned, return void
+	return ""
 }
