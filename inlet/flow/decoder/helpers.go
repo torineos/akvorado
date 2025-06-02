@@ -178,8 +178,7 @@ func DecodeIP(b []byte) netip.Addr {
 }
 
 // Hostname returns the FQDN of an IP address. Looks at /etc/host on the local machine
-func Hostname(netip netip.Addr) string
-{
+func Hostname(netip netip.Addr) string {
 	var host string
 	names, err := net.LookupAddr(netip.String())
 	if err == nil {
