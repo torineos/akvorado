@@ -14,3 +14,9 @@ mock_*.go
 /.go-cache
 /.npm-cache
 /result
+
+# local stuff
+/docker/versions-local.yml
+/docker/docker-compose-local-local.yml
+/docker/oauth2
+/docker/traefik
