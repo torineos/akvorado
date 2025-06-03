@@ -20,3 +20,4 @@ mock_*.go
 /docker/docker-compose-local-local.yml
 /docker/oauth2
 /docker/traefik
+/config-dev
