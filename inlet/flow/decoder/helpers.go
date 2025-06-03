@@ -6,6 +6,7 @@ package decoder
 import (
 	"encoding/binary"
 	"net/netip"
+	"net"
 
 	"akvorado/common/helpers"
 	"akvorado/common/schema"
@@ -168,10 +169,23 @@ func ParseEthernet(sch *schema.Component, bf *schema.FlowMessage, data []byte) u
 	return 0
 }
 
-// DecodeIP decodes an IP address
+// DecodeIP decodes an IP address. Looks at /etc/host on the local machine
 func DecodeIP(b []byte) netip.Addr {
 	if ip, ok := netip.AddrFromSlice(b); ok {
 		return netip.AddrFrom16(ip.As16())
 	}
 	return netip.Addr{}
+}
+
+// Hostname returns the FQDN of an IP address. Looks at /etc/host on the local machine
+func Hostname(netip netip.Addr) string {
+	var host string
+	names, err := net.LookupAddr(netip.String())
+	if err == nil {
+		// get only the first hostname, since most of the case it is the most relevant
+		host = names[0]
+		return host
+	}
+	// if no host is returned, return void
+	return ""
 }
