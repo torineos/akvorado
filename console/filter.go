@@ -278,7 +278,7 @@ UNION DISTINCT
 				})
 			}
 			input.Prefix = "" // We have handled this internally
-		case "srcnetname", "dstnetname", "srcnetrole", "dstnetrole", "srcnetsite", "dstnetsite", "srcnetregion", "dstnetregion", "srcnettenant", "dstnettenant":
+		case "srcnetname", "dstnetname", "srcnetrole", "dstnetrole", "srcnetsite", "dstnetsite", "srcnetregion", "dstnetregion", "srcnettenant", "dstnettenant", "srchostname", "dsthostname":
 			attributeName := inputColumn[6:]
 			results := []struct {
 				Attribute string `ch:"attribute"`

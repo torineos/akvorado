@@ -126,7 +126,10 @@ func (c *Component) runWorker(workerID int) error {
 
 			// Enrichment
 			ip := flow.ExporterAddress
-			if skip := c.enrichFlow(ip, exporter, flow); skip {
+			srcIP := flow.SrcAddr
+			dstIP := flow.DstAddr
+
+			if skip := c.enrichFlow(ip, srcIP, dstIP, exporter, flow); skip {
 				continue
 			}
 

@@ -5,6 +5,7 @@ package core
 
 import (
 	"context"
+	"net"
 	"net/netip"
 	"strconv"
 	"time"
@@ -19,11 +20,14 @@ type exporterAndInterfaceInfo struct {
 }
 
 // enrichFlow adds more data to a flow.
-func (c *Component) enrichFlow(exporterIP netip.Addr, exporterStr string, flow *schema.FlowMessage) (skip bool) {
+func (c *Component) enrichFlow(exporterIP netip.Addr, sourceIP netip.Addr, destinationIP netip.Addr, exporterStr string, flow *schema.FlowMessage) (skip bool) {
 	var flowExporterName string
 	var flowInIfName, flowInIfDescription, flowOutIfName, flowOutIfDescription string
 	var flowInIfSpeed, flowOutIfSpeed, flowInIfIndex, flowOutIfIndex uint32
 	var flowInIfVlan, flowOutIfVlan uint16
+
+	// These will not use SNMP
+	var flowSrcHostname, flowDstHostname string
 
 	t := time.Now() // only call it once
 	expClassification := exporterClassification{}
@@ -150,6 +154,10 @@ func (c *Component) enrichFlow(exporterIP netip.Addr, exporterStr string, flow *
 	c.d.Schema.ProtobufAppendBytes(flow, schema.ColumnExporterName, []byte(flowExporterName))
 	c.d.Schema.ProtobufAppendVarint(flow, schema.ColumnInIfSpeed, uint64(flowInIfSpeed))
 	c.d.Schema.ProtobufAppendVarint(flow, schema.ColumnOutIfSpeed, uint64(flowOutIfSpeed))
+
+	// hostname
+	c.d.Schema.ProtobufAppendBytes(flow, schema.ColumnSrcHostname, getHostname(sourceIP))
+	c.d.Schema.ProtobufAppendBytes(flow, schema.ColumnDstHostname, getHostname(destinationIP))
 
 	return
 }
@@ -348,6 +356,21 @@ func (c *Component) classifyInterface(
 	}
 	c.classifierInterfaceCache.Put(t, key, classification)
 	return c.writeInterface(fl, classification, directionIn)
+}
+
+// getHostname returns the FQDN of an IP address. Looks at /etc/host on the local machine
+func getHostname(netip netip.Addr) []byte {
+
+	names, err := net.LookupAddr(netip.String())
+	if err == nil {
+		// get only the first hostname, since most of the case it is the most relevant
+		host := names[0]
+		// encode it to get it in the flow
+		encodedHost := []byte(host)
+		return encodedHost
+	}
+	// if no host is returned, return void
+	return nil
 }
 
 func isPrivateAS(as uint32) bool {

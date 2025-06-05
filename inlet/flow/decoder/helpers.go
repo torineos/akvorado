@@ -6,7 +6,6 @@ package decoder
 import (
 	"encoding/binary"
 	"net/netip"
-	"net"
 
 	"akvorado/common/helpers"
 	"akvorado/common/schema"
@@ -65,7 +64,12 @@ func ParseIPv6(sch *schema.Component, bf *schema.FlowMessage, data []byte) uint6
 		sch.ProtobufAppendVarint(bf, schema.ColumnIPTTL, uint64(data[7]))
 		sch.ProtobufAppendVarint(bf, schema.ColumnIPv6FlowLabel,
 			uint64(binary.BigEndian.Uint32(data[0:4])&0xfffff))
-		// TODO fragmentID/fragmentOffset are in a separate header
+		// TODO fragmentID/fragmentOffset are in a separate header}
+		
+	}
+	
+	if !sch.IsDisabled(schema.ColumnGroupL7){
+
 	}
 	data = data[40:]
 	sch.ProtobufAppendVarint(bf, schema.ColumnProto, uint64(proto))
@@ -175,17 +179,4 @@ func DecodeIP(b []byte) netip.Addr {
 		return netip.AddrFrom16(ip.As16())
 	}
 	return netip.Addr{}
-}
-
-// Hostname returns the FQDN of an IP address. Looks at /etc/host on the local machine
-func Hostname(netip netip.Addr) string {
-	var host string
-	names, err := net.LookupAddr(netip.String())
-	if err == nil {
-		// get only the first hostname, since most of the case it is the most relevant
-		host = names[0]
-		return host
-	}
-	// if no host is returned, return void
-	return ""
 }

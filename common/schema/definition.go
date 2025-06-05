@@ -186,7 +186,7 @@ const (
 	ColumnGroupL2 ColumnGroup = iota + 1
 	ColumnGroupNAT
 	ColumnGroupL3L4
-
+	ColumnGroupL7
 	ColumnGroupLast
 )
 
@@ -576,7 +576,8 @@ END`,
 			},
 			{
 				Key:                ColumnSrcHostname,
-				Disabled: 			true,
+				Disabled:           true,
+				Group:              ColumnGroupL7,
 				ParserType:         "string",
 				ClickHouseType:     "LowCardinality(String)",
 				ClickHouseMainOnly: true,
