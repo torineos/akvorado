@@ -16,6 +16,7 @@ mock_*.go
 /result
 
 # local stuff
+./vscode
 /docker/versions-local.yml
 /docker/docker-compose-local-local.yml
 /docker/oauth2
