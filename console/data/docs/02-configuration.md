@@ -645,6 +645,36 @@ For ICMP, you get `ICMPv4Type`, `ICMPv4Code`, `ICMPv6Type`, `ICMPv6Code`,
 `ICMPv4`, and `ICMPv6`. The two latest one are displayed as a string in the
 console (like `echo-reply` or `frag-needed`).
 
+Here is a list of the columns that are disabled by default:
+- SrcVlan
+- DstVlan
+- SrcAddrNAT (main table only)
+- DstAddrNAT (main table only)
+- SrcPortNAT (main table only)
+- DstPortNAT (main table only)
+- SrcMAC
+- DstMAC
+- IPTTL
+- IPTos
+- IPFragmentID
+- IPFragmentOffset
+- IPv6FlowLabel
+- TCPFlags
+- ICMPv4
+- ICMPv4Type
+- ICMPv4Code
+- ICMPv6
+- ICMPv6Type
+- ICMPv6Code
+- NextHop
+- MPLSLabels (main table only)
+- MPLS1stLabel (main table only)
+- MPLS2ndLabel (main table only)
+- MPLS3rdLabel (main table only)
+- MPLS4thLabel (main table only)
+- SrcHostname
+- DstHostname
+
 #### Custom dictionaries
 
 You can add custom dimensions to be looked up via a dictionary. This is useful
