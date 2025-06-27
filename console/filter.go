@@ -143,6 +143,11 @@ func (c *Component) filterCompleteHandlerFunc(gc *gin.Context) {
 				Label:  "undefined",
 				Detail: "network boundary",
 			})
+		case "srchostname", "dsthostname":
+			completions = append(completions, filterCompletion{
+			Label: "host",
+			Detail: "TODO: Autocompletion."})
+		}
 		case "etype":
 			completions = append(completions, filterCompletion{
 				Label:  "IPv4",
@@ -356,7 +361,6 @@ UNION DISTINCT
 		case "inifprovider", "outifprovider":
 			column = "IfProvider"
 			detail = "provider name"
-		}
 		if column != "" {
 			// Query "exporter" table
 			sqlQuery := fmt.Sprintf(`

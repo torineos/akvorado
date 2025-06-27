@@ -577,6 +577,7 @@ END`,
 			{
 				Key:                ColumnSrcHostname,
 				Disabled:           true,
+				Depends:            []ColumnKey{ColumnSrcAddr}, // Depends on the very existence of IP addresses
 				Group:              ColumnGroupL7,
 				ParserType:         "string",
 				ClickHouseType:     "LowCardinality(String)",

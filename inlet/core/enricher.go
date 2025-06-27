@@ -26,9 +26,6 @@ func (c *Component) enrichFlow(exporterIP netip.Addr, sourceIP netip.Addr, desti
 	var flowInIfSpeed, flowOutIfSpeed, flowInIfIndex, flowOutIfIndex uint32
 	var flowInIfVlan, flowOutIfVlan uint16
 
-	// These will not use SNMP
-	var flowSrcHostname, flowDstHostname string
-
 	t := time.Now() // only call it once
 	expClassification := exporterClassification{}
 	inIfClassification := interfaceClassification{}
@@ -156,8 +153,11 @@ func (c *Component) enrichFlow(exporterIP netip.Addr, sourceIP netip.Addr, desti
 	c.d.Schema.ProtobufAppendVarint(flow, schema.ColumnOutIfSpeed, uint64(flowOutIfSpeed))
 
 	// hostname
-	c.d.Schema.ProtobufAppendBytes(flow, schema.ColumnSrcHostname, getHostname(sourceIP))
-	c.d.Schema.ProtobufAppendBytes(flow, schema.ColumnDstHostname, getHostname(destinationIP))
+	// ADD CONDITION
+	c.d.Schema.ProtobufAppendBytes(flow, schema.ColumnSrcHostname, []byte(getHostname(sourceIP)))
+	c.d.Schema.ProtobufAppendBytes(flow, schema.ColumnDstHostname, []byte(getHostname(destinationIP)))
+	// logging/debuging
+	c.metrics.flowsErrors.WithLabelValues(getHostname(sourceIP), "DEBUGGING HOSTNAME").Inc()
 
 	return
 }
@@ -358,19 +358,15 @@ func (c *Component) classifyInterface(
 	return c.writeInterface(fl, classification, directionIn)
 }
 
-// getHostname returns the FQDN of an IP address. Looks at /etc/host on the local machine
-func getHostname(netip netip.Addr) []byte {
-
+func getHostname(netip netip.Addr) string {
+	// getHostname returns the FQDN of an IP address. Looks at /etc/resolv.conf
 	names, err := net.LookupAddr(netip.String())
 	if err == nil {
-		// get only the first hostname, since most of the case it is the most relevant
-		host := names[0]
-		// encode it to get it in the flow
-		encodedHost := []byte(host)
-		return encodedHost
+		// return only the first hostname
+		return names[0]
 	}
-	// if no host is returned, return void
-	return nil
+	// if no host is returned, return n/a
+	return "n/a"
 }
 
 func isPrivateAS(as uint32) bool {

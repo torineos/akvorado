@@ -781,3 +781,6 @@ func TestGetNextHop(t *testing.T) {
 		})
 	}
 }
+func TestGetHostname(t *testing.T) {
+
+}
