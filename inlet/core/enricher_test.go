@@ -782,5 +782,25 @@ func TestGetNextHop(t *testing.T) {
 	}
 }
 func TestGetHostname(t *testing.T) {
-
+	// cases here
+	var tests = []struct {
+		name  string
+		input netip.Addr
+		want  string
+	}{
+		// the table itself
+		{"8.8.4.4 should be dns.google.", netip.MustParseAddr("8.8.4.4"), "dns.google."},                           // Ipv4 Google public DNS
+		{"2001:4860:4860::8888 should be dns.google.", netip.MustParseAddr("2001:4860:4860::8888"), "dns.google."}, // Ipv6 Google public DNS. This test can fail if localhost doesn't use IPv6.
+		{"192.168.40.56 should be void", netip.MustParseAddr("192.168.40.56"), "n/a"},                              // Try to use an unused ip w/ no host resolution.
+	}
+	// execution loop
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ans := getHostname(tt.input)
+			fmt.Println("ans", ans, "tt.want", tt.want)
+			if ans != tt.want {
+				t.Errorf("getHostname() returned %s, expected ", tt.want)
+			}
+		})
+	}
 }

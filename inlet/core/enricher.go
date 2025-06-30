@@ -153,7 +153,7 @@ func (c *Component) enrichFlow(exporterIP netip.Addr, sourceIP netip.Addr, desti
 	c.d.Schema.ProtobufAppendVarint(flow, schema.ColumnOutIfSpeed, uint64(flowOutIfSpeed))
 
 	// hostname
-	// ADD CONDITION
+	// ADD CONDITION: Make it toggable to preserve resources 
 	c.d.Schema.ProtobufAppendBytes(flow, schema.ColumnSrcHostname, []byte(getHostname(sourceIP)))
 	c.d.Schema.ProtobufAppendBytes(flow, schema.ColumnDstHostname, []byte(getHostname(destinationIP)))
 	// logging/debuging
@@ -358,14 +358,12 @@ func (c *Component) classifyInterface(
 	return c.writeInterface(fl, classification, directionIn)
 }
 
+// getHostname returns the first of the list of FQDN of an IP address. If no host is returned, return n/a. Looks at /etc/resolv.conf
 func getHostname(netip netip.Addr) string {
-	// getHostname returns the FQDN of an IP address. Looks at /etc/resolv.conf
 	names, err := net.LookupAddr(netip.String())
 	if err == nil {
-		// return only the first hostname
 		return names[0]
 	}
-	// if no host is returned, return n/a
 	return "n/a"
 }
 
