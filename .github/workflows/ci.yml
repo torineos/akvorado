@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - main
+      - hostname_resolution
     tags:
       - v*
   pull_request:
@@ -211,7 +211,7 @@ jobs:
       - build-linux
       - licenses
     runs-on: ubuntu-22.04
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    if: github.ref == 'refs/heads/hostname_resolution' || startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: read
       packages: write
@@ -229,7 +229,7 @@ jobs:
           images: |
             ghcr.io/${{ github.repository }}
           tags: |
-            type=schedule,pattern=main
+            type=schedule,pattern=hostname_resolution
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -249,7 +249,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
           provenance: mode=max
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:main
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:hostname_resolution
           cache-to: type=inline
 
   release:
@@ -280,7 +280,7 @@ jobs:
       # Build tarball for docker compose
       - name: Build Docker Compose "quick start"
         run: |
-          sed -i s,akvorado:main,akvorado:${GITHUB_REF_NAME#v}, docker/versions.yml
+          sed -i s,akvorado:hostname_resolution,akvorado:${GITHUB_REF_NAME#v}, docker/versions.yml
           tar zcvf docker-compose-quickstart.tar.gz \
             .env docker/* \
             orchestrator/clickhouse/data/docker-entrypoint.sh \
