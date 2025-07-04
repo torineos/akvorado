@@ -939,6 +939,18 @@ following keys:
 If the files are updated while *Akvorado* is running, they are automatically
 refreshed. For a given database, the latest paths override the earlier ones.
 
+### Reverse DNS resolution
+The `hostname` directive allows to toggle the reverse DNS resolution for `SrcAddr` 
+and `DstAddr` received in the flow. It is set to false by default in order to limit 
+the consumption of resources and limiting the number of requests done. The reverse 
+resolution is done by reading the `/etc/resolv.conf` of the Akvorado server.
+
+It accepts the following key `toggle` that accepts boolean values. 
+```yaml
+hostname:
+  toggle: false
+```
+
 ## Console service
 
 The main components of the console service are `http`, `console`,

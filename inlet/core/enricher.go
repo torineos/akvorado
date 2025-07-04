@@ -153,7 +153,7 @@ func (c *Component) enrichFlow(exporterIP netip.Addr, sourceIP netip.Addr, desti
 	c.d.Schema.ProtobufAppendVarint(flow, schema.ColumnOutIfSpeed, uint64(flowOutIfSpeed))
 
 	// hostname
-	// ADD CONDITION: Make it toggable to preserve resources 
+	// ADD CONDITION: Make it toggable to preserve resources
 	c.d.Schema.ProtobufAppendBytes(flow, schema.ColumnSrcHostname, []byte(getHostname(sourceIP)))
 	c.d.Schema.ProtobufAppendBytes(flow, schema.ColumnDstHostname, []byte(getHostname(destinationIP)))
 	// logging/debuging
@@ -189,6 +189,17 @@ func (c *Component) getASNumber(flowAS, bmpAS uint32) (asn uint32) {
 		}
 	}
 	return asn
+}
+
+// getASNumber retrieves the AS number for a flow, depending on user preferences.
+func (c *Component) getHostname(IPAddr netip.Addr) (hostname string) {
+	// getHostname returns the first of the list of FQDN of an IP address. If no host is returned, return n/a. Looks at /etc/resolv.conf
+	names, err := net.LookupAddr(IPAddr.String())
+	if err == nil {
+		return names[0]
+	}
+	return "n/a"
+
 }
 
 // getNetMask retrieves the prefix length for a flow, depending on user preferences.
@@ -356,15 +367,6 @@ func (c *Component) classifyInterface(
 	}
 	c.classifierInterfaceCache.Put(t, key, classification)
 	return c.writeInterface(fl, classification, directionIn)
-}
-
-// getHostname returns the first of the list of FQDN of an IP address. If no host is returned, return n/a. Looks at /etc/resolv.conf
-func getHostname(netip netip.Addr) string {
-	names, err := net.LookupAddr(netip.String())
-	if err == nil {
-		return names[0]
-	}
-	return "n/a"
 }
 
 func isPrivateAS(as uint32) bool {
