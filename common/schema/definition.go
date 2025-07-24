@@ -173,6 +173,10 @@ const (
 	ColumnMPLS3rdLabel
 	ColumnMPLS4thLabel
 
+	// Hostname test
+	ColumnSrcHostname
+	ColumnDstHostname
+
 	// ColumnLast points to after the last static column, custom dictionaries
 	// (dynamic columns) come after ColumnLast
 	ColumnLast
@@ -182,7 +186,7 @@ const (
 	ColumnGroupL2 ColumnGroup = iota + 1
 	ColumnGroupNAT
 	ColumnGroupL3L4
-
+	ColumnGroupL7
 	ColumnGroupLast
 )
 
@@ -569,6 +573,15 @@ END`,
 				ClickHouseType:     "UInt32",
 				ClickHouseAlias:    "MPLSLabels[4]",
 				ParserType:         "uint",
+			},
+			{
+				Key:                ColumnSrcHostname,
+				Disabled:           true,
+				Depends:            []ColumnKey{ColumnSrcAddr}, // Depends on the very existence of IP addresses
+				Group:              ColumnGroupL7,
+				ParserType:         "string",
+				ClickHouseType:     "LowCardinality(String)",
+				ClickHouseMainOnly: true,
 			},
 		},
 	}.finalize()

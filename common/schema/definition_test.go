@@ -59,6 +59,9 @@ func TestDisabledGroup(t *testing.T) {
 	if !c.IsDisabled(ColumnGroupL2) {
 		t.Error("ColumnGroupL2 is not disabled while it should")
 	}
+	if !c.IsDisabled(ColumnGroupL7) {
+		t.Error("ColumnGroupL7 is not disabled while it should")
+	}
 	column, _ := c.LookupColumnByKey(ColumnSrcAddrNAT)
 	column.Disabled = false
 	c = c.finalize()

@@ -14,3 +14,22 @@ database:
       content: >-
         InIfBoundary = external AND
         SrcAS IN (AS15169, AS16509, AS32934, AS6185, AS8075)
+
+schema:
+  materialize:
+    - SrcNetPrefix #:par défaut ig
+    - DstNetPrefix
+
+  disabled:
+    - SrcCountry
+    - DstCountry
+  enabled: #sont ajoutés dans .jq dimentions qan dis curl -s http://127.0.0.1:8080/api/v0/console/configuration | jq .dimensions
+    - SrcVlan
+    - DstVlan
+    - SrcMAC
+    - DstMAC
+    - IPTTL
+    - IPTos
+    ### TESTING IMPLEMENTATION
+    - SrcHostname # Affichage front end de la catégorie mais pas de données
+    - DstHostname # Affichage front end de la catégorie mais pas de données

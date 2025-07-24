@@ -12,6 +12,8 @@ import (
 	"akvorado/common/schema"
 	"akvorado/inlet/flow/decoder"
 
+	//"akvorado/inlet/hostname"
+
 	"github.com/netsampler/goflow2/v2/decoders/netflow"
 	"github.com/netsampler/goflow2/v2/decoders/netflowlegacy"
 )
@@ -264,6 +266,12 @@ func (nd *Decoder) decodeRecord(version uint16, obsDomainID uint32, samplingRate
 					foundIcmpTypeCode = true
 				}
 			}
+
+			// if nd.d.Schema.IsDisabled(schema.ColumnGroupL7) {
+			// 	// L7 field if enabled
+			// 	bf.SrcHostname = hostname.LookupHostname(bf.SrcAddr)
+			// 	bf.DstHostname = hostname.LookupHostname(bf.DstAddr)
+			// }
 		}
 	}
 	if dataLinkFrameSectionIdx >= 0 {

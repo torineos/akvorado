@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"akvorado/common/schema"
+	"akvorado/inlet/hostname"
 )
 
 // exporterAndInterfaceInfo aggregates both exporter info and interface info
@@ -150,6 +151,15 @@ func (c *Component) enrichFlow(exporterIP netip.Addr, exporterStr string, flow *
 	c.d.Schema.ProtobufAppendBytes(flow, schema.ColumnExporterName, []byte(flowExporterName))
 	c.d.Schema.ProtobufAppendVarint(flow, schema.ColumnInIfSpeed, uint64(flowInIfSpeed))
 	c.d.Schema.ProtobufAppendVarint(flow, schema.ColumnOutIfSpeed, uint64(flowOutIfSpeed))
+
+	// hostname enrichement test
+	// The check if hostnae is enabled is done in LookupHostname, so the code is light here.
+	// encode from the string outputs
+	// c.d.Schema.ProtobufAppendBytes(flow, schema.ColumnSrcHostname, []byte(hostname.LookupHostname(flow.SrcAddr)))
+	// c.d.Schema.ProtobufAppendBytes(flow, schema.ColumnDstHostname, []byte(hostname.LookupHostname(flow.DstAddr)))
+	c.d.Schema.ProtobufAppendBytes(flow, schema.ColumnSrcHostname, []byte(hostname.LookupHostname(flow.SrcAddr)))
+	c.d.Schema.ProtobufAppendBytes(flow, schema.ColumnDstHostname, []byte(hostname.LookupHostname(flow.DstAddr)))
+	//
 
 	return
 }

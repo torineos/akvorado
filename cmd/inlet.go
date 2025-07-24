@@ -18,6 +18,7 @@ import (
 	"akvorado/common/schema"
 	"akvorado/inlet/core"
 	"akvorado/inlet/flow"
+	"akvorado/inlet/hostname"
 	"akvorado/inlet/kafka"
 	"akvorado/inlet/metadata"
 	"akvorado/inlet/metadata/provider/snmp"
@@ -35,6 +36,8 @@ type InletConfiguration struct {
 	Kafka     kafka.Configuration
 	Core      core.Configuration
 	Schema    schema.Configuration
+
+	Hostname hostname.Configuration
 }
 
 // Reset resets the configuration for the inlet command to its default value.
@@ -48,6 +51,8 @@ func (c *InletConfiguration) Reset() {
 		Kafka:     kafka.DefaultConfiguration(),
 		Core:      core.DefaultConfiguration(),
 		Schema:    schema.DefaultConfiguration(),
+
+		Hostname: hostname.DefaultConfiguration(),
 	}
 	c.Metadata.Providers = []metadata.ProviderConfiguration{{Config: snmp.DefaultConfiguration()}}
 	c.Routing.Provider.Config = bmp.DefaultConfiguration()
@@ -134,6 +139,15 @@ func inletStart(r *reporter.Reporter, config InletConfiguration, checkOnly bool)
 	if err != nil {
 		return fmt.Errorf("unable to initialize Kafka component: %w", err)
 	}
+
+	hostnameComponent, err := hostname.New(r, config.Hostname, hostname.Dependencies{
+		Daemon: daemonComponent,
+		//Schema: schemaComponent,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to initialize Hostname component: %w", err)
+	}
+
 	coreComponent, err := core.New(r, config.Core, core.Dependencies{
 		Daemon:   daemonComponent,
 		Flow:     flowComponent,
@@ -142,6 +156,8 @@ func inletStart(r *reporter.Reporter, config InletConfiguration, checkOnly bool)
 		Kafka:    kafkaComponent,
 		HTTP:     httpComponent,
 		Schema:   schemaComponent,
+
+		Hostname: hostnameComponent,
 	})
 	if err != nil {
 		return fmt.Errorf("unable to initialize core component: %w", err)
@@ -164,6 +180,7 @@ func inletStart(r *reporter.Reporter, config InletConfiguration, checkOnly bool)
 		kafkaComponent,
 		coreComponent,
 		flowComponent,
+		hostnameComponent,
 	}
 	return StartStopComponents(r, daemonComponent, components)
 }
@@ -175,6 +192,22 @@ func InletConfigurationUnmarshallerHook() mapstructure.DecodeHookFunc {
 		if from.Kind() != reflect.Map || from.IsNil() || to.Type() != reflect.TypeOf(InletConfiguration{}) {
 			return from.Interface(), nil
 		}
+
+		// hostname to hostname j'en a aucune idée
+		// {
+		// 	var enableKey *reflect.Value
+		// 	fromKeys := from.MapKeys()
+		// 	for i, k := range fromKeys {
+		// 		k = helpers.ElemOrIdentity(k)
+		// 		if k.Kind() != reflect.String {
+		// 			return from.Interface(), nil
+		// 		}
+		// 		if helpers.MapStructureMatchName(k.String(), "hostname") {
+		// 			enableKey = &fromKeys[i]
+		// 			fmt.Print(enableKey)
+		// 		}
+		// 	}
+		// }
 
 		// snmp → metadata
 		{

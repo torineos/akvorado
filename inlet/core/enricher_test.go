@@ -22,6 +22,7 @@ import (
 	"akvorado/inlet/kafka"
 	"akvorado/inlet/metadata"
 	"akvorado/inlet/routing"
+	//"akvorado/inlet/hostname"
 )
 
 func TestEnrich(t *testing.T) {
@@ -532,6 +533,26 @@ ClassifyProviderRegex(Interface.Description, "^Transit: ([^ ]+)", "$1")`,
 				},
 			},
 		},
+		{
+			Name: "no rule, reverse lookup enabled",
+			Configuration: gin.H{"hostname": gin.H{
+				"enable": `true`,
+			}},
+			InputFlow: func() *schema.FlowMessage {
+				return &schema.FlowMessage{
+					SrcAddr: netip.MustParseAddr("::ffff:192.0.2.142"),
+					DstAddr: netip.MustParseAddr("::ffff:192.0.2.10"),
+				}
+			},
+			OutputFlow: &schema.FlowMessage{
+				ExporterAddress: netip.MustParseAddr("::ffff:192.0.2.142"),
+				SrcAddr:         netip.MustParseAddr("::ffff:192.0.2.142"),
+				ProtobufDebug: map[schema.ColumnKey]interface{}{
+					schema.ColumnSrcHostname: "test",
+					schema.ColumnDstHostname: "test",
+				},
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -546,6 +567,7 @@ ClassifyProviderRegex(Interface.Description, "^Transit: ([^ ]+)", "$1")`,
 			httpComponent := httpserver.NewMock(t, r)
 			routingComponent := routing.NewMock(t, r)
 			routingComponent.PopulateRIB(t)
+			//hostnameComponent := hostname.NewMock(t, r, hostname.DefaultConfiguration())
 
 			// Prepare a configuration
 			configuration := DefaultConfiguration()
@@ -566,6 +588,7 @@ ClassifyProviderRegex(Interface.Description, "^Transit: ([^ ]+)", "$1")`,
 				HTTP:     httpComponent,
 				Routing:  routingComponent,
 				Schema:   schema.NewMock(t),
+				//Hostname: hostnameComponent,
 			})
 			if err != nil {
 				t.Fatalf("New() error:\n%+v", err)

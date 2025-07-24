@@ -17,6 +17,7 @@ import (
 	"akvorado/common/reporter"
 	"akvorado/common/schema"
 	"akvorado/inlet/flow"
+	"akvorado/inlet/hostname"
 	"akvorado/inlet/kafka"
 	"akvorado/inlet/metadata"
 	"akvorado/inlet/routing"
@@ -50,6 +51,7 @@ type Dependencies struct {
 	Kafka    *kafka.Component
 	HTTP     *httpserver.Component
 	Schema   *schema.Component
+	Hostname *hostname.Component
 }
 
 // New creates a new core component.

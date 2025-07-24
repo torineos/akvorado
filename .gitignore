@@ -14,3 +14,9 @@ mock_*.go
 /.go-cache
 /.npm-cache
 /result
+
+/*-dev
+/docker/*-local.yml
+/docker/oauth2
+/docker/traefik
+.env.local

@@ -24,6 +24,7 @@ import (
 	"akvorado/common/reporter"
 	"akvorado/common/schema"
 	"akvorado/inlet/flow"
+	"akvorado/inlet/hostname"
 	"akvorado/inlet/kafka"
 	"akvorado/inlet/metadata"
 	"akvorado/inlet/routing"
@@ -67,6 +68,8 @@ func TestCore(t *testing.T) {
 			OutIf:           out,
 			SrcAddr:         netip.MustParseAddr("67.43.156.77"),
 			DstAddr:         netip.MustParseAddr("2.125.160.216"),
+			SrcHostname:     hostname.LookupHostname(netip.MustParseAddr("67.43.156.77")),
+			DstHostname:     hostname.LookupHostname(netip.MustParseAddr("2.125.160.216")),
 			ProtobufDebug: map[schema.ColumnKey]interface{}{
 				schema.ColumnBytes:   6765,
 				schema.ColumnPackets: 4,
@@ -92,6 +95,8 @@ func TestCore(t *testing.T) {
 		expected.ExporterAddress = netip.AddrFrom16(expected.ExporterAddress.As16())
 		expected.SrcAddr = netip.AddrFrom16(expected.SrcAddr.As16())
 		expected.DstAddr = netip.AddrFrom16(expected.DstAddr.As16())
+		expected.SrcHostname = hostname.LookupHostname(expected.SrcAddr)
+		expected.DstHostname = hostname.LookupHostname(expected.DstAddr)
 		expected.ProtobufDebug[schema.ColumnInIfName] = fmt.Sprintf("Gi0/0/%d", in)
 		expected.ProtobufDebug[schema.ColumnOutIfName] = fmt.Sprintf("Gi0/0/%d", out)
 		expected.ProtobufDebug[schema.ColumnInIfDescription] = fmt.Sprintf("Interface %d", in)
@@ -153,7 +158,7 @@ func TestCore(t *testing.T) {
 		received := make(chan bool)
 		kafkaProducer.ExpectInputWithMessageCheckerFunctionAndSucceed(func(msg *sarama.ProducerMessage) error {
 			defer close(received)
-			expectedTopic := fmt.Sprintf("flows-%s", sch.ProtobufMessageHash())
+			expectedTopic := fmt.Sprintf("flows-%s", sch.ProtobufMessageHash()) // shows decoded flow (as a list)
 			if msg.Topic != expectedTopic {
 				t.Errorf("Kafka message topic (-got, +want):\n-%s\n+%s", msg.Topic, expectedTopic)
 			}
@@ -260,6 +265,8 @@ func TestCore(t *testing.T) {
 				"NextHop":        "",
 				"SrcNetMask":     0,
 				"DstNetMask":     0,
+				"SrcHostname":    "67.43.156.77.CUSTOMER.VPLS.NET.",
+				"DstHostname":    "n/a",
 				"SrcVlan":        0,
 				"DstVlan":        0,
 				"GotASPath":      false,

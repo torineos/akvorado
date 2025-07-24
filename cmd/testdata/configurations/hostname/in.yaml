@@ -1,0 +1,4 @@
+---
+inlet:
+  hostname:
+    enable: true

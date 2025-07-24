@@ -92,7 +92,7 @@ type FlowMessage struct {
 	SrcVlan uint16
 	DstVlan uint16
 
-	// For geolocation or BMP
+	// For geolocation, BMP or reverse resolution
 	SrcAddr netip.Addr
 	DstAddr netip.Addr
 	NextHop netip.Addr
@@ -105,6 +105,10 @@ type FlowMessage struct {
 
 	SrcNetMask uint8
 	DstNetMask uint8
+
+	// testing hostname stuff
+	SrcHostname string
+	DstHostname string
 
 	// protobuf is the protobuf representation for the information not contained above.
 	protobuf      []byte

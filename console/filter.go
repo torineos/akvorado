@@ -151,6 +151,11 @@ func (c *Component) filterCompleteHandlerFunc(gc *gin.Context) {
 				Label:  "IPv6",
 				Detail: "ethernet type",
 			})
+		case "srchostname", "dsthostname":
+			completions = append(completions, filterCompletion{
+				Label:  "host",
+				Detail: "TODO: Autocompletion."})
+
 		case "proto":
 			// Do not complete from ClickHouse, we want a subset of options
 			completions = append(completions,

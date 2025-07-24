@@ -12,6 +12,7 @@ import (
 	"akvorado/common/helpers"
 
 	"github.com/go-viper/mapstructure/v2"
+	//"akvorado/inlet/hostname"
 )
 
 // Configuration describes the configuration for the core component.
