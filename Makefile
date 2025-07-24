@@ -78,8 +78,8 @@ conntrackfixer/mocks/mock_conntrackfixer.go: go.mod ; $(info $(M) generate mocks
 	$Q if [ `$(GO) env GOOS` = "linux" ]; then \
 	   $(MOCKGEN) -package mocks -build_constraint "!release" -destination $@ \
 		akvorado/conntrackfixer ConntrackConn,DockerClient ; \
+		touch $@ ; \
 	fi
-	$Q touch $@
 
 inlet/core/asnprovider_enumer.go: go.mod inlet/core/config.go ; $(info $(M) generate enums for ASNProvider…)
 	$Q $(ENUMER) -type=ASNProvider -text -transform=kebab -trimprefix=ASNProvider inlet/core/config.go
@@ -183,7 +183,8 @@ test-coverage-go: ; $(info $(M) running Go coverage tests…) @ ## Run Go covera
 	$Q $(GO) tool cover -html=test/go/profile.out -o test/go/coverage.html
 	$Q $(GOCOV) convert test/go/profile.out | $(GOCOVXML) > test/go/coverage.xml
 	@printf "Code coverage: "; \
-		echo "scale=1;$$(sed -En 's/^<coverage line-rate="([0-9.]+)".*/\1/p' test/go/coverage.xml) * 100 / 1" | bc -q
+		c=$$(echo "scale=1;$$(sed -En 's/^<coverage line-rate="([0-9.]+)".*/\1/p' test/go/coverage.xml) * 100 / 1" | bc -q) ; \
+	    echo $$c ; [ $$c != 0 ]
 
 test-js: .fmt-js~ .lint-js~ $(GENERATED_JS)
 test-js: ; $(info $(M) running JS tests…) @ ## Run JS tests
@@ -248,7 +249,7 @@ docker-upgrade-versions: ; $(info $(M) check for Docker image updates…) @ ## C
 	$Q sed -En 's/^\s*image:\s+(.+):(.+)\s+#\s+(.+)$$/\1 \2 \3/p' docker/versions.yml \
 		| while read -r image version regex; do \
 			latest=$$(nix run nixpkgs\#skopeo -- list-tags docker://"$$image" \
-				| sed -En 's/\s+"(.*)",/\1/p' \
+				| sed -En 's/\s+"(.*)",?/\1/p' \
 				| grep -xP "$$regex" \
 				| sort -Vr | head -1); \
 			[ "$$version" = "$$latest" ] || { \

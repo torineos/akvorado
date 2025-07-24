@@ -19,6 +19,12 @@
           name = "akvorado-frontend";
           src = ./console/frontend;
           npmDepsHash = builtins.readFile ./nix/npmDepsHash.txt;
+          # Filter out optional dependencies
+          prePatch = ''
+            ${pkgs.jq}/bin/jq 'del(.packages[] | select(.optional == true and .dev == null))' \
+              < package-lock.json > package-lock.json.tmp
+            mv package-lock.json.tmp package-lock.json
+          '';
           installPhase = ''
             mkdir $out
             cp -r node_modules $out/node_modules
@@ -28,6 +34,13 @@
         ianaServiceNames = pkgs.fetchurl {
           url = "https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.csv";
           hash = builtins.readFile ./nix/ianaServiceNamesHash.txt;
+          # There are many bogus changes in this file. To avoid updating the
+          # hash too often, filter the lines with a service name and a port.
+          downloadToTemp = true;
+          postFetch = ''
+            < $downloadedFile > $out \
+            awk -F, '(NR == 1) {print} ($0 !~ "^ " && $1 != "" && $2 != "" && ($3 == "tcp" || $3 == "udp")) {print}'
+          '';
         };
         backend = pkgs.buildGoModule.override { inherit go; } {
           doCheck = false;
@@ -64,17 +77,17 @@
           rec {
             update-vendorHash = ''
               sha256=$(2>&1 nix build --no-link .#backend.goModules \
-                          | ${pkgs.gnused}/bin/sed -nE "s/\s+got:\s+(sha256-.*)/\1/p")
+                          | sed -nE "s/\s+got:\s+(sha256-.*)/\1/p")
               [[ -z "$sha256" ]] || echo $sha256 > nix/vendorHash.txt
             '';
             update-npmDepsHash = ''
               sha256=$(2>&1 nix build --no-link .#frontend.npmDeps \
-                          | ${pkgs.gnused}/bin/sed -nE "s/\s+got:\s+(sha256-.*)/\1/p")
+                          | sed -nE "s/\s+got:\s+(sha256-.*)/\1/p")
               [[ -z "$sha256" ]] || echo $sha256 > nix/npmDepsHash.txt
             '';
             update-ianaServiceNamesHash = ''
               sha256=$(2>&1 nix build --no-link .#ianaServiceNames \
-                          | ${pkgs.gnused}/bin/sed -nE "s/\s+got:\s+(sha256-.*)/\1/p")
+                          | sed -nE "s/\s+got:\s+(sha256-.*)/\1/p")
               [[ -z "$sha256" ]] || echo $sha256 > nix/ianaServiceNamesHash.txt
             '';
             update = ''
