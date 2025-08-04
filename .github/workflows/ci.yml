@@ -16,7 +16,7 @@ jobs:
     permissions: {}
     if: |
       !startsWith(github.event.head_commit.message, 'build: update Nix dependency hashes') ||
-       startsWith(github.ref, 'refs/tags/')
+       github.ref_type == 'tag'
     steps:
       - name: Fetch dependabot metadata
         if: ${{ github.actor == 'dependabot[bot]' && github.event_name == 'pull_request' }}
@@ -47,8 +47,6 @@ jobs:
         run: docker compose -f docker/docker-compose-dev.yml up --wait --wait-timeout 60 --quiet-pull
       - name: Setup
         uses: ./.github/actions/setup
-
-      # Install dependencies
       - name: Install dependencies
         run: sudo apt-get install -qqy shared-mime-info curl
 
@@ -211,7 +209,7 @@ jobs:
       - build-linux
       - licenses
     runs-on: ubuntu-22.04
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
     permissions:
       contents: read
       packages: write
@@ -243,7 +241,12 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile
-          platforms: ${{ startsWith(github.ref, 'refs/tags/') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          platforms: >-
+            ${{
+              github.ref_type == 'tag' &&
+              'linux/amd64,linux/amd64/v3,linux/arm64' ||
+              'linux/amd64,linux/amd64/v3'
+            }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -259,7 +262,7 @@ jobs:
       - build-js
       - docker
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.ref_type == 'tag'
     permissions:
       contents: write
       actions: read
@@ -283,15 +286,13 @@ jobs:
           sed -i s,akvorado:main,akvorado:${GITHUB_REF_NAME#v}, docker/versions.yml
           tar zcvf docker-compose-quickstart.tar.gz \
             .env docker/* \
-            orchestrator/clickhouse/data/docker-entrypoint.sh \
             config/*.yaml
       - name: Build Docker Compose "upgrade"
         run: |
           mv .env .env.dist
           mv docker/docker-compose-local.yml docker/docker-compose-local.yml.dist
           tar zcvf docker-compose-upgrade.tar.gz \
-            .env.dist docker/* \
-            orchestrator/clickhouse/data/docker-entrypoint.sh
+            .env.dist docker/*
 
       # Publish release
       - name: Publish release
@@ -299,6 +300,7 @@ jobs:
         with:
           body_path: changelog.md
           draft: true
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
           fail_on_unmatched_files: true
           files: |
             akvorado

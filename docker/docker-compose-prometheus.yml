@@ -1,0 +1,63 @@
+---
+volumes:
+  akvorado-prometheus:
+  akvorado-jmx-agent:
+
+services:
+  prometheus:
+    extends:
+      file: versions.yml
+      service: prometheus
+    restart: unless-stopped
+    user: root                  # for access to /var/run/docker.sock
+    volumes:
+      - akvorado-prometheus:/prometheus
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      # Those are the defaults
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+      # Those are not the defaults
+      - --web.external-url=/prometheus
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.prometheus.entrypoints=public
+      - traefik.http.routers.prometheus.rule=PathPrefix(`/prometheus`)
+      - traefik.http.services.prometheus.loadbalancer.server.port=9090
+
+  node-exporter:
+    extends:
+      file: versions.yml
+      service: node-exporter
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --no-collector.filesystem
+
+  # Kafka monitoring
+  jmx-exporter-downloader:
+    image: alpine:latest
+    command: /usr/local/bin/jmx-exporter-download.sh
+    volumes:
+      - akvorado-jmx-agent:/opt/jmx-exporter
+      - ./jmx-exporter-download.sh:/usr/local/bin/jmx-exporter-download.sh
+  kafka:
+    expose:
+      - 9092 # kafka
+      - 9100 # metrics
+    depends_on:
+      jmx-exporter-downloader:
+        condition: service_completed_successfully
+    environment:
+      KAFKA_OPTS: >-
+        -javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=9100:/etc/kafka/jmx-exporter.yaml
+    volumes:
+      - akvorado-jmx-agent:/opt/jmx-exporter
+      - ./kafka-jmx-exporter-config.yaml:/etc/kafka/jmx-exporter.yaml

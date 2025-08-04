@@ -63,22 +63,22 @@ func quoteString(s string) string {
 func (c *Component) tableAlreadyExists(ctx context.Context, table, column, target string) (bool, error) {
 	// Normalize a bit the target. This is far from perfect, but we test that
 	// and we hope this does not differ between ClickHouse versions!
-	target = strings.TrimSpace(regexp.MustCompile("\\s+").ReplaceAllString(target, " "))
+	target = strings.TrimSpace(regexp.MustCompile(`\s+`).ReplaceAllString(target, " "))
 
 	// Fetch the existing one
 	row := c.d.ClickHouse.QueryRow(ctx,
 		fmt.Sprintf("SELECT %s FROM system.tables WHERE name = $1 AND database = $2", column),
-		table, c.config.Database)
+		table, c.d.ClickHouse.DatabaseName())
 	var existing string
 	if err := row.Scan(&existing); err != nil && err != sql.ErrNoRows {
 		return false, fmt.Errorf("cannot check if table %s already exists: %w", table, err)
 	}
 	// Add a few tweaks
 	existing = strings.ReplaceAll(existing,
-		fmt.Sprintf(`dictGetOrDefault('%s.`, c.config.Database),
+		fmt.Sprintf(`dictGetOrDefault('%s.`, c.d.ClickHouse.DatabaseName()),
 		"dictGetOrDefault('")
 	existing = strings.ReplaceAll(existing,
-		fmt.Sprintf(`dictGet('%s.`, c.config.Database),
+		fmt.Sprintf(`dictGet('%s.`, c.d.ClickHouse.DatabaseName()),
 		"dictGet('")
 	existing = regexp.MustCompile(` SETTINGS index_granularity = \d+$`).ReplaceAllString(existing, "")
 
@@ -95,7 +95,7 @@ func (c *Component) tableAlreadyExists(ctx context.Context, table, column, targe
 // mergeTreeEngine returns a MergeTree engine definition, either plain or using
 // Replicated if we are on a cluster.
 func (c *Component) mergeTreeEngine(table string, variant string, args ...string) string {
-	if c.config.Cluster != "" {
+	if c.d.ClickHouse.ClusterName() != "" {
 		return fmt.Sprintf(`Replicated%sMergeTree(%s)`, variant, strings.Join(
 			append([]string{
 				fmt.Sprintf("'/clickhouse/tables/shard-{shard}/%s'", table),
@@ -118,7 +118,7 @@ func (c *Component) distributedTable(table string) string {
 // localTable turns a table name to the matching local distributed table if we
 // are in a cluster.
 func (c *Component) localTable(table string) string {
-	if c.config.Cluster != "" && c.shards > 1 {
+	if c.d.ClickHouse.ClusterName() != "" && c.shards > 1 {
 		return fmt.Sprintf("%s_local", table)
 	}
 	return table
@@ -147,7 +147,7 @@ LIFETIME(MIN 0 MAX 3600)
 LAYOUT({{ .Layout }}())
 {{ .Settings }}
 `, gin.H{
-		"Database":   c.config.Database,
+		"Database":   c.d.ClickHouse.DatabaseName(),
 		"Name":       name,
 		"Schema":     schema,
 		"PrimaryKey": primary,
@@ -198,7 +198,7 @@ ENGINE = {{ .Engine }}
 ORDER BY (ExporterAddress, IfName)
 TTL TimeReceived + toIntervalDay(1)`,
 		gin.H{
-			"Database": c.config.Database,
+			"Database": c.d.ClickHouse.DatabaseName(),
 			"Table":    name,
 			"Schema":   strings.Join(cols, ", "),
 			"Engine":   c.mergeTreeEngine(name, "Replacing", "TimeReceived"),
@@ -248,7 +248,7 @@ func (c *Component) createExportersConsumerView(ctx context.Context) error {
 		`SELECT DISTINCT {{ .Columns }} FROM {{ .Database }}.{{ .Table }} ARRAY JOIN arrayEnumerate([1, 2]) AS num`,
 		gin.H{
 			"Table":    c.distributedTable("flows"),
-			"Database": c.config.Database,
+			"Database": c.d.ClickHouse.DatabaseName(),
 			"Columns":  strings.Join(cols, ", "),
 		})
 	if err != nil {
@@ -281,36 +281,18 @@ CREATE MATERIALIZED VIEW exporters_consumer TO %s AS %s
 
 // createRawFlowsTable creates the raw flow table
 func (c *Component) createRawFlowsTable(ctx context.Context) error {
-	hash := c.d.Schema.ProtobufMessageHash()
+	hash := c.d.Schema.ClickHouseHash()
 	tableName := fmt.Sprintf("flows_%s_raw", hash)
-	kafkaSettings := []string{
-		fmt.Sprintf(`kafka_broker_list = %s`,
-			quoteString(strings.Join(c.config.Kafka.Brokers, ","))),
-		fmt.Sprintf(`kafka_topic_list = %s`,
-			quoteString(fmt.Sprintf("%s-%s", c.config.Kafka.Topic, hash))),
-		fmt.Sprintf(`kafka_group_name = %s`, quoteString(c.config.Kafka.GroupName)),
-		`kafka_format = 'Protobuf'`,
-		fmt.Sprintf(`kafka_schema = 'flow-%s.proto:FlowMessagev%s'`, hash, hash),
-		fmt.Sprintf(`kafka_num_consumers = %d`, c.config.Kafka.Consumers),
-		`kafka_thread_per_consumer = 1`,
-		`kafka_handle_error_mode = 'stream'`,
-	}
-	for _, setting := range c.config.Kafka.EngineSettings {
-		kafkaSettings = append(kafkaSettings, setting)
-	}
-	kafkaEngine := fmt.Sprintf("Kafka SETTINGS %s", strings.Join(kafkaSettings, ", "))
 
 	// Build CREATE query
 	createQuery, err := stemplate(
-		`CREATE TABLE {{ .Database }}.{{ .Table }} ({{ .Schema }}) ENGINE = {{ .Engine }}`,
+		`CREATE TABLE {{ .Database }}.{{ .Table }} ({{ .Schema }}) ENGINE = Null`,
 		gin.H{
-			"Database": c.config.Database,
+			"Database": c.d.ClickHouse.DatabaseName(),
 			"Table":    tableName,
 			"Schema": c.d.Schema.ClickHouseCreateTable(
 				schema.ClickHouseSkipGeneratedColumns,
-				schema.ClickHouseUseTransformFromType,
 				schema.ClickHouseSkipAliasedColumns),
-			"Engine": kafkaEngine,
 		})
 	if err != nil {
 		return fmt.Errorf("cannot build query to create raw flows table: %w", err)
@@ -328,7 +310,6 @@ func (c *Component) createRawFlowsTable(ctx context.Context) error {
 	c.r.Info().Msg("create raw flows table")
 	for _, table := range []string{
 		fmt.Sprintf("%s_consumer", tableName),
-		fmt.Sprintf("%s_errors", tableName),
 		tableName,
 	} {
 		if err := c.d.ClickHouse.ExecOnCluster(ctx, fmt.Sprintf(`DROP TABLE IF EXISTS %s SYNC`, table)); err != nil {
@@ -348,20 +329,19 @@ func (c *Component) createRawFlowsTable(ctx context.Context) error {
 var dictionaryNetworksLookupRegex = regexp.MustCompile(`\bc_(Src|Dst)Networks\[([[:lower:]]+)\]\B`)
 
 func (c *Component) createRawFlowsConsumerView(ctx context.Context) error {
-	tableName := fmt.Sprintf("flows_%s_raw", c.d.Schema.ProtobufMessageHash())
+	tableName := fmt.Sprintf("flows_%s_raw", c.d.Schema.ClickHouseHash())
 	viewName := fmt.Sprintf("%s_consumer", tableName)
 
 	// Build SELECT query
 	args := gin.H{
 		"Columns": strings.Join(c.d.Schema.ClickHouseSelectColumns(
 			schema.ClickHouseSubstituteGenerates,
-			schema.ClickHouseSubstituteTransforms,
 			schema.ClickHouseSkipAliasedColumns), ", "),
-		"Database": c.config.Database,
+		"Database": c.d.ClickHouse.DatabaseName(),
 		"Table":    tableName,
 	}
 	selectQuery, err := stemplate(
-		`SELECT {{ .Columns }} FROM {{ .Database }}.{{ .Table }} WHERE length(_error) = 0`,
+		`SELECT {{ .Columns }} FROM {{ .Database }}.{{ .Table }}`,
 		args)
 	if err != nil {
 		return fmt.Errorf("cannot build select statement for raw flows consumer view: %w", err)
@@ -442,105 +422,6 @@ func (c *Component) createRawFlowsConsumerView(ctx context.Context) error {
 		return fmt.Errorf("cannot create raw flows consumer view: %w", err)
 	}
 
-	return nil
-}
-
-func (c *Component) createRawFlowsErrors(ctx context.Context) error {
-	name := c.localTable("flows_raw_errors")
-	createQuery, err := stemplate(`CREATE TABLE {{ .Database }}.{{ .Table }}
-(`+"`timestamp`"+` DateTime,
- `+"`topic`"+` LowCardinality(String),
- `+"`partition`"+` UInt64,
- `+"`offset`"+` UInt64,
- `+"`raw`"+` String,
- `+"`error`"+` String)
-ENGINE = {{ .Engine }}
-PARTITION BY toYYYYMMDDhhmmss(toStartOfHour(timestamp))
-ORDER BY (timestamp, topic, partition, offset)
-TTL timestamp + toIntervalDay(1)
-`, gin.H{
-		"Table":    name,
-		"Database": c.config.Database,
-		"Engine":   c.mergeTreeEngine(name, ""),
-	})
-	if err != nil {
-		return fmt.Errorf("cannot build query to create flow error table: %w", err)
-	}
-	if ok, err := c.tableAlreadyExists(ctx, name, "create_table_query", createQuery); err != nil {
-		return err
-	} else if ok {
-		c.r.Info().Msgf("table %s already exists, skip migration", name)
-		return errSkipStep
-	}
-	c.r.Info().Msgf("create table %s", name)
-	createOrReplaceQuery := strings.Replace(createQuery, "CREATE ", "CREATE OR REPLACE ", 1)
-	if err := c.d.ClickHouse.ExecOnCluster(ctx, createOrReplaceQuery); err != nil {
-		return fmt.Errorf("cannot create table %s: %w", name, err)
-	}
-	return nil
-}
-
-func (c *Component) createRawFlowsErrorsConsumerView(ctx context.Context) error {
-	source := fmt.Sprintf("flows_%s_raw", c.d.Schema.ProtobufMessageHash())
-	viewName := "flows_raw_errors_consumer"
-
-	// Build SELECT query
-	selectQuery, err := stemplate(`
-SELECT
- now() AS timestamp,
- _topic AS topic,
- _partition AS partition,
- _offset AS offset,
- _raw_message AS raw,
- _error AS error
-FROM {{ .Database }}.{{ .Table }}
-WHERE length(_error) > 0`, gin.H{
-		"Database": c.config.Database,
-		"Table":    source,
-	})
-	if err != nil {
-		return fmt.Errorf("cannot build select statement for raw flows error: %w", err)
-	}
-
-	// Check the existing one
-	if ok, err := c.tableAlreadyExists(ctx, viewName, "as_select", selectQuery); err != nil {
-		return err
-	} else if ok {
-		c.r.Info().Msg("raw flows errors view already exists, skip migration")
-		return errSkipStep
-	}
-
-	// Drop and create
-	c.r.Info().Msg("create raw flows errors view")
-	if err := c.d.ClickHouse.ExecOnCluster(ctx, fmt.Sprintf(`DROP TABLE IF EXISTS %s SYNC`, viewName)); err != nil {
-		return fmt.Errorf("cannot drop table %s: %w", viewName, err)
-	}
-	if err := c.d.ClickHouse.ExecOnCluster(ctx,
-		fmt.Sprintf(`CREATE MATERIALIZED VIEW %s TO %s AS %s`,
-			viewName, c.distributedTable("flows_raw_errors"), selectQuery)); err != nil {
-		return fmt.Errorf("cannot create raw flows errors view: %w", err)
-	}
-
-	return nil
-}
-
-func (c *Component) deleteOldRawFlowsErrorsView(ctx context.Context) error {
-	tableName := fmt.Sprintf("flows_%s_raw", c.d.Schema.ProtobufMessageHash())
-	viewName := fmt.Sprintf("%s_errors", tableName)
-
-	// Check the existing one
-	if ok, err := c.tableAlreadyExists(ctx, viewName, "name", viewName); err != nil {
-		return err
-	} else if !ok {
-		c.r.Debug().Msg("old raw flows errors view does not exist, skip migration")
-		return errSkipStep
-	}
-
-	// Drop
-	c.r.Info().Msg("delete old raw flows errors view")
-	if err := c.d.ClickHouse.ExecOnCluster(ctx, fmt.Sprintf(`DROP TABLE IF EXISTS %s SYNC`, viewName)); err != nil {
-		return fmt.Errorf("cannot drop table %s: %w", viewName, err)
-	}
 	return nil
 }
 
@@ -625,7 +506,7 @@ FROM system.columns
 WHERE database = $1
 AND table = $2
 ORDER BY position ASC
-`, c.config.Database, tableName); err != nil {
+`, c.d.ClickHouse.DatabaseName(), tableName); err != nil {
 		return fmt.Errorf("cannot query columns table: %w", err)
 	}
 
@@ -771,7 +652,7 @@ SELECT
  toStartOfInterval(TimeReceived, toIntervalSecond({{ .Seconds }})) AS TimeReceived,
  {{ .Columns }}
 FROM {{ .Database }}.{{ .Table }}`, gin.H{
-		"Database": c.config.Database,
+		"Database": c.d.ClickHouse.DatabaseName(),
 		"Table":    c.localTable("flows"),
 		"Seconds":  uint64(resolution.Interval.Seconds()),
 		"Columns": strings.Join(c.d.Schema.ClickHouseSelectColumns(
@@ -824,7 +705,7 @@ SELECT name, type, compression_codec, default_kind, default_expression
 FROM system.columns
 WHERE database = $1 AND table = $2
 ORDER BY position ASC
-`, c.config.Database, c.localTable(source)); err != nil {
+`, c.d.ClickHouse.DatabaseName(), c.localTable(source)); err != nil {
 		return fmt.Errorf("cannot query columns table: %w", err)
 	}
 	cols := []string{}
@@ -845,8 +726,8 @@ ORDER BY position ASC
 ({{ .Schema }})
 ENGINE = Distributed('{{ .Cluster }}', '{{ .Database}}', '{{ .Source }}', rand())`,
 		gin.H{
-			"Cluster":  c.config.Cluster,
-			"Database": c.config.Database,
+			"Cluster":  c.d.ClickHouse.ClusterName(),
+			"Database": c.d.ClickHouse.DatabaseName(),
 			"Source":   c.localTable(source),
 			"Target":   c.distributedTable(source),
 			"Schema":   strings.Join(cols, ", "),

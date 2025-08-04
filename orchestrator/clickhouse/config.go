@@ -7,33 +7,23 @@ import (
 	"reflect"
 	"time"
 
-	"akvorado/common/remotedatasourcefetcher"
+	"akvorado/common/remotedatasource"
 
-	"akvorado/common/clickhousedb"
 	"akvorado/common/helpers"
-	"akvorado/common/kafka"
 
 	"github.com/go-viper/mapstructure/v2"
 )
 
 // Configuration describes the configuration for the ClickHouse configurator.
 type Configuration struct {
-	clickhousedb.Configuration `mapstructure:",squash" yaml:"-,inline"`
 	// SkipMigrations tell if we should skip migrations.
 	SkipMigrations bool
-	// Kafka describes Kafka-specific configuration
-	Kafka KafkaConfiguration
 	// Resolutions describe the various resolutions to use to
 	// store data and the associated TTLs.
 	Resolutions []ResolutionConfiguration `validate:"min=1,dive"`
 	// MaxPartitions define the number of partitions to have for a
 	// consolidated flow tables when full.
 	MaxPartitions int `validate:"isdefault|min=1"`
-	// SystemLogTTL is the TTL to set for system log tables.
-	SystemLogTTL time.Duration `validate:"isdefault|min=1m"`
-	// PrometheusEndpoint defines the endpoint ClickHouse can use to expose
-	// metrics to Prometheus. If not defined, this is not configured.
-	PrometheusEndpoint string
 	// ASNs is a mapping from AS numbers to names. It replaces or
 	// extends the builtin list of AS numbers.
 	ASNs map[uint32]string
@@ -44,7 +34,7 @@ type Configuration struct {
 	// definitions to map IP networks to attributes. It is used to
 	// instantiate the SrcNet* and DstNet* columns. The results
 	// are overridden by the content of Networks.
-	NetworkSources map[string]remotedatasourcefetcher.RemoteDataSource `validate:"dive"`
+	NetworkSources map[string]remotedatasource.Source `validate:"dive"`
 	// NetworkSourceTimeout tells how long to wait for network
 	// sources to be ready. 503 is returned when not.
 	NetworkSourcesTimeout time.Duration `validate:"min=0"`
@@ -74,27 +64,9 @@ type ResolutionConfiguration struct {
 	TTL time.Duration `validate:"isdefault|min=1h"`
 }
 
-// KafkaConfiguration describes Kafka-specific configuration
-type KafkaConfiguration struct {
-	kafka.Configuration `mapstructure:",squash" yaml:"-,inline"`
-	// Consumers tell how many consumers to use to poll data from Kafka
-	Consumers int `validate:"min=1"`
-	// GroupName defines the Kafka consumers group used to poll data from topic,
-	// shared between all Consumers.
-	GroupName string
-	// EngineSettings allows one to set arbitrary settings for Kafka engine in
-	// ClickHouse.
-	EngineSettings []string
-}
-
 // DefaultConfiguration represents the default configuration for the ClickHouse configurator.
 func DefaultConfiguration() Configuration {
 	return Configuration{
-		Configuration: clickhousedb.DefaultConfiguration(),
-		Kafka: KafkaConfiguration{
-			Consumers: 1,
-			GroupName: "clickhouse",
-		},
 		Resolutions: []ResolutionConfiguration{
 			{0, 15 * 24 * time.Hour},                   // 15 days
 			{time.Minute, 7 * 24 * time.Hour},          // 7 days
@@ -103,7 +75,6 @@ func DefaultConfiguration() Configuration {
 		},
 		MaxPartitions:         50,
 		NetworkSourcesTimeout: 10 * time.Second,
-		SystemLogTTL:          30 * 24 * time.Hour, // 30 days
 	}
 }
 
@@ -134,7 +105,7 @@ type NetworkAttributes struct {
 // also accepts a string instead of attributes for backward
 // compatibility.
 func NetworkAttributesUnmarshallerHook() mapstructure.DecodeHookFunc {
-	return func(from, to reflect.Value) (interface{}, error) {
+	return func(from, to reflect.Value) (any, error) {
 		from = helpers.ElemOrIdentity(from)
 		to = helpers.ElemOrIdentity(to)
 		if to.Type() != reflect.TypeOf(NetworkAttributes{}) {
@@ -150,5 +121,9 @@ func NetworkAttributesUnmarshallerHook() mapstructure.DecodeHookFunc {
 func init() {
 	helpers.RegisterMapstructureUnmarshallerHook(helpers.SubnetMapUnmarshallerHook[NetworkAttributes]())
 	helpers.RegisterMapstructureUnmarshallerHook(NetworkAttributesUnmarshallerHook())
+	helpers.RegisterMapstructureDeprecatedFields[Configuration](
+		"SystemLogTTL",
+		"PrometheusEndpoint",
+		"Kafka")
 	helpers.RegisterSubnetMapValidation[NetworkAttributes]()
 }

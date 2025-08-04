@@ -94,9 +94,10 @@ func (input graphLineHandlerInput) previousPeriod() graphLineHandlerInput {
 }
 
 type toSQL1Options struct {
-	skipWithClause   bool
-	reverseDirection bool
-	offsetedStart    time.Time
+	skipWithClause    bool
+	reverseDirection  bool
+	offsetedStart     time.Time
+	mainTableRequired bool
 }
 
 func (input graphLineHandlerInput) toSQL1(axis int, options toSQL1Options) string {
@@ -176,7 +177,7 @@ ORDER BY time WITH FILL
 			Start:             input.Start,
 			End:               input.End,
 			StartForInterval:  startForInterval,
-			MainTableRequired: requireMainTable(input.schema, input.Dimensions, input.Filter),
+			MainTableRequired: options.mainTableRequired,
 			Points:            input.Points,
 			Units:             units,
 		}),
@@ -188,26 +189,33 @@ ORDER BY time WITH FILL
 
 // toSQL converts a graph input to an SQL request
 func (input graphLineHandlerInput) toSQL() string {
-	parts := []string{input.toSQL1(1, toSQL1Options{})}
-	// Handle specific options. We have to align time periods in
-	// case the previous period does not use the same offsets.
+	// Calculate mainTableRequired once and use it for all axes to ensure
+	// consistency. This is useful as previous period will remove the
+	// dimensions.
+	mainTableRequired := requireMainTable(input.schema, input.Dimensions, input.Filter)
+	parts := []string{input.toSQL1(1, toSQL1Options{
+		mainTableRequired: mainTableRequired,
+	})}
 	if input.Bidirectional {
 		parts = append(parts, input.reverseDirection().toSQL1(2, toSQL1Options{
-			skipWithClause:   true,
-			reverseDirection: true,
+			skipWithClause:    true,
+			reverseDirection:  true,
+			mainTableRequired: mainTableRequired,
 		}))
 	}
 	if input.PreviousPeriod {
 		parts = append(parts, input.previousPeriod().toSQL1(3, toSQL1Options{
-			skipWithClause: true,
-			offsetedStart:  input.Start,
+			skipWithClause:    true,
+			offsetedStart:     input.Start,
+			mainTableRequired: mainTableRequired,
 		}))
 	}
 	if input.Bidirectional && input.PreviousPeriod {
 		parts = append(parts, input.reverseDirection().previousPeriod().toSQL1(4, toSQL1Options{
-			skipWithClause:   true,
-			reverseDirection: true,
-			offsetedStart:    input.Start,
+			skipWithClause:    true,
+			reverseDirection:  true,
+			offsetedStart:     input.Start,
+			mainTableRequired: mainTableRequired,
 		}))
 	}
 	return strings.Join(parts, "\nUNION ALL\n")
@@ -251,9 +259,8 @@ func (c *Component) graphLineHandlerFunc(gc *gin.Context) {
 		return
 	}
 
-	// When filling 0 value, we may get an empty dimensions.
-	// From ClickHouse 22.4, it is possible to do interpolation database-side
-	// (INTERPOLATE (['Other', 'Other'] AS Dimensions))
+	// When requesting the previous period, we get an empty dimension in
+	// results. Put it back.
 	if len(input.Dimensions) > 0 {
 		zeroDimensions := make([]string, len(input.Dimensions))
 		for idx := range zeroDimensions {
@@ -272,7 +279,7 @@ func (c *Component) graphLineHandlerFunc(gc *gin.Context) {
 	}
 	lastTime := time.Time{}
 	for _, result := range results {
-		if result.Axis == 1 && result.Time != lastTime {
+		if result.Axis == 1 && !result.Time.Equal(lastTime) {
 			output.Time = append(output.Time, result.Time)
 			lastTime = result.Time
 		}
@@ -304,7 +311,7 @@ func (c *Component) graphLineHandlerFunc(gc *gin.Context) {
 			maxes[axis] = map[string]uint64{}
 			lasts[axis] = map[string]int{}
 		}
-		if result.Time != lastTime {
+		if !result.Time.Equal(lastTime) {
 			// New timestamp, increment time index
 			timeIndexForAxis[axis]++
 			lastTimeForAxis[axis] = result.Time

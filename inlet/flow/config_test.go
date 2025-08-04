@@ -10,9 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"akvorado/common/helpers/yaml"
+	"akvorado/common/pb"
 
 	"akvorado/common/helpers"
-	"akvorado/inlet/flow/decoder"
 	"akvorado/inlet/flow/input/file"
 	"akvorado/inlet/flow/input/udp"
 )
@@ -21,8 +21,8 @@ func TestDecodeConfiguration(t *testing.T) {
 	helpers.TestConfigurationDecode(t, helpers.ConfigurationDecodeCases{
 		{
 			Description: "from empty configuration",
-			Initial:     func() interface{} { return Configuration{} },
-			Configuration: func() interface{} {
+			Initial:     func() any { return Configuration{} },
+			Configuration: func() any {
 				return gin.H{
 					"inputs": []gin.H{
 						{
@@ -42,7 +42,7 @@ func TestDecodeConfiguration(t *testing.T) {
 			},
 			Expected: Configuration{
 				Inputs: []InputConfiguration{{
-					Decoder: "netflow",
+					Decoder: pb.RawFlow_DECODER_NETFLOW,
 					Config: &udp.Configuration{
 						Workers:   3,
 						QueueSize: 100000,
@@ -50,7 +50,7 @@ func TestDecodeConfiguration(t *testing.T) {
 					},
 					UseSrcAddrForExporterAddr: true,
 				}, {
-					Decoder: "sflow",
+					Decoder: pb.RawFlow_DECODER_SFLOW,
 					Config: &udp.Configuration{
 						Workers:   3,
 						QueueSize: 100000,
@@ -61,18 +61,18 @@ func TestDecodeConfiguration(t *testing.T) {
 			},
 		}, {
 			Description: "from existing configuration",
-			Initial: func() interface{} {
+			Initial: func() any {
 				return Configuration{
 					Inputs: []InputConfiguration{{
-						Decoder: "netflow",
+						Decoder: pb.RawFlow_DECODER_NETFLOW,
 						Config:  udp.DefaultConfiguration(),
 					}, {
-						Decoder: "sflow",
+						Decoder: pb.RawFlow_DECODER_SFLOW,
 						Config:  udp.DefaultConfiguration(),
 					}},
 				}
 			},
-			Configuration: func() interface{} {
+			Configuration: func() any {
 				return gin.H{
 					"inputs": []gin.H{
 						{
@@ -91,14 +91,14 @@ func TestDecodeConfiguration(t *testing.T) {
 			},
 			Expected: Configuration{
 				Inputs: []InputConfiguration{{
-					Decoder: "netflow",
+					Decoder: pb.RawFlow_DECODER_NETFLOW,
 					Config: &udp.Configuration{
 						Workers:   3,
 						QueueSize: 100000,
 						Listen:    "192.0.2.1:2055",
 					},
 				}, {
-					Decoder: "sflow",
+					Decoder: pb.RawFlow_DECODER_SFLOW,
 					Config: &udp.Configuration{
 						Workers:   3,
 						QueueSize: 100000,
@@ -108,15 +108,15 @@ func TestDecodeConfiguration(t *testing.T) {
 			},
 		}, {
 			Description: "change type",
-			Initial: func() interface{} {
+			Initial: func() any {
 				return Configuration{
 					Inputs: []InputConfiguration{{
-						Decoder: "netflow",
+						Decoder: pb.RawFlow_DECODER_NETFLOW,
 						Config:  udp.DefaultConfiguration(),
 					}},
 				}
 			},
-			Configuration: func() interface{} {
+			Configuration: func() any {
 				return gin.H{
 					"inputs": []gin.H{
 						{
@@ -128,7 +128,7 @@ func TestDecodeConfiguration(t *testing.T) {
 			},
 			Expected: Configuration{
 				Inputs: []InputConfiguration{{
-					Decoder: "netflow",
+					Decoder: pb.RawFlow_DECODER_NETFLOW,
 					Config: &file.Configuration{
 						Paths: []string{"file1", "file2"},
 					},
@@ -136,11 +136,11 @@ func TestDecodeConfiguration(t *testing.T) {
 			},
 		}, {
 			Description: "only set one item",
-			Initial: func() interface{} {
+			Initial: func() any {
 				return Configuration{
 					Inputs: []InputConfiguration{{
-						Decoder:         "netflow",
-						TimestampSource: decoder.TimestampSourceUDP,
+						Decoder:         pb.RawFlow_DECODER_NETFLOW,
+						TimestampSource: pb.RawFlow_TS_INPUT,
 						Config: &udp.Configuration{
 							Workers:   2,
 							QueueSize: 100,
@@ -149,7 +149,7 @@ func TestDecodeConfiguration(t *testing.T) {
 					}},
 				}
 			},
-			Configuration: func() interface{} {
+			Configuration: func() any {
 				return gin.H{
 					"inputs": []gin.H{
 						{
@@ -160,7 +160,7 @@ func TestDecodeConfiguration(t *testing.T) {
 			},
 			Expected: Configuration{
 				Inputs: []InputConfiguration{{
-					Decoder: "netflow",
+					Decoder: pb.RawFlow_DECODER_NETFLOW,
 					Config: &udp.Configuration{
 						Workers:   2,
 						QueueSize: 100,
@@ -170,10 +170,10 @@ func TestDecodeConfiguration(t *testing.T) {
 			},
 		}, {
 			Description: "incorrect decoder",
-			Initial: func() interface{} {
+			Initial: func() any {
 				return Configuration{}
 			},
-			Configuration: func() interface{} {
+			Configuration: func() any {
 				return gin.H{
 					"inputs": []gin.H{
 						{
@@ -194,10 +194,10 @@ func TestDecodeConfiguration(t *testing.T) {
 		},
 		{
 			Description: "netflow timestamp source netflow-packet",
-			Initial: func() interface{} {
+			Initial: func() any {
 				return Configuration{
 					Inputs: []InputConfiguration{{
-						Decoder: "netflow",
+						Decoder: pb.RawFlow_DECODER_NETFLOW,
 						Config: &udp.Configuration{
 							Workers:   2,
 							QueueSize: 100,
@@ -206,7 +206,7 @@ func TestDecodeConfiguration(t *testing.T) {
 					}},
 				}
 			},
-			Configuration: func() interface{} {
+			Configuration: func() any {
 				return gin.H{
 					"inputs": []gin.H{
 						{
@@ -218,8 +218,8 @@ func TestDecodeConfiguration(t *testing.T) {
 			},
 			Expected: Configuration{
 				Inputs: []InputConfiguration{{
-					Decoder:         "netflow",
-					TimestampSource: decoder.TimestampSourceNetflowPacket,
+					Decoder:         pb.RawFlow_DECODER_NETFLOW,
+					TimestampSource: pb.RawFlow_TS_NETFLOW_PACKET,
 					Config: &udp.Configuration{
 						Workers:   2,
 						QueueSize: 100,
@@ -230,10 +230,10 @@ func TestDecodeConfiguration(t *testing.T) {
 		},
 		{
 			Description: "netflow timestamp source netflow-first-switched",
-			Initial: func() interface{} {
+			Initial: func() any {
 				return Configuration{
 					Inputs: []InputConfiguration{{
-						Decoder: "netflow",
+						Decoder: pb.RawFlow_DECODER_NETFLOW,
 						Config: &udp.Configuration{
 							Workers:   2,
 							QueueSize: 100,
@@ -242,7 +242,7 @@ func TestDecodeConfiguration(t *testing.T) {
 					}},
 				}
 			},
-			Configuration: func() interface{} {
+			Configuration: func() any {
 				return gin.H{
 					"inputs": []gin.H{
 						{
@@ -254,8 +254,8 @@ func TestDecodeConfiguration(t *testing.T) {
 			},
 			Expected: Configuration{
 				Inputs: []InputConfiguration{{
-					Decoder:         "netflow",
-					TimestampSource: decoder.TimestampSourceNetflowFirstSwitched,
+					Decoder:         pb.RawFlow_DECODER_NETFLOW,
+					TimestampSource: pb.RawFlow_TS_NETFLOW_FIRST_SWITCHED,
 					Config: &udp.Configuration{
 						Workers:   2,
 						QueueSize: 100,
@@ -271,15 +271,15 @@ func TestMarshalYAML(t *testing.T) {
 	cfg := Configuration{
 		Inputs: []InputConfiguration{
 			{
-				Decoder:         "netflow",
-				TimestampSource: decoder.TimestampSourceNetflowFirstSwitched,
+				Decoder:         pb.RawFlow_DECODER_NETFLOW,
+				TimestampSource: pb.RawFlow_TS_NETFLOW_FIRST_SWITCHED,
 				Config: &udp.Configuration{
 					Listen:    "192.0.2.11:2055",
 					QueueSize: 1000,
 					Workers:   3,
 				},
 			}, {
-				Decoder: "sflow",
+				Decoder: pb.RawFlow_DECODER_SFLOW,
 				Config: &udp.Configuration{
 					Listen:    "192.0.2.11:6343",
 					QueueSize: 1000,
@@ -306,11 +306,10 @@ func TestMarshalYAML(t *testing.T) {
       listen: 192.0.2.11:6343
       queuesize: 1000
       receivebuffer: 0
-      timestampsource: udp
+      timestampsource: input
       type: udp
       usesrcaddrforexporteraddr: true
       workers: 3
-ratelimit: 0
 `
 	if diff := helpers.Diff(strings.Split(string(got), "\n"), strings.Split(expected, "\n")); diff != "" {
 		t.Fatalf("Marshal() (-got, +want):\n%s", diff)

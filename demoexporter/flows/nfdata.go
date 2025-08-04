@@ -12,10 +12,10 @@ import (
 	"akvorado/common/helpers"
 )
 
-// getNetflowData will transform the generated flows into UDP payloads
+// getNetFlowData will transform the generated flows into UDP payloads
 // to be sent on the wire. It returns the payloads on a channel. All
 // messages should be read to avoid leaking the channel.
-func getNetflowData(ctx context.Context, flows []generatedFlow, sequenceNumber uint32, start, now time.Time) <-chan []byte {
+func getNetFlowData(ctx context.Context, flows []generatedFlow, sequenceNumber uint32, start, now time.Time) <-chan []byte {
 	output := make(chan []byte, 16)
 	uptime := uint32(now.Sub(start).Seconds())
 
@@ -63,14 +63,14 @@ func getNetflowData(ctx context.Context, flows []generatedFlow, sequenceNumber u
 					if etype == helpers.ETypeIPv4 {
 						err = binary.Write(buf, binary.BigEndian, ipv4Flow{
 							IPFlow:  flow.IPFlow,
-							SrcAddr: *(*[4]byte)(flow.SrcAddr.To4()),
-							DstAddr: *(*[4]byte)(flow.DstAddr.To4()),
+							SrcAddr: flow.SrcAddr.As4(),
+							DstAddr: flow.DstAddr.As4(),
 						})
 					} else {
 						err = binary.Write(buf, binary.BigEndian, ipv6Flow{
 							IPFlow:  flow.IPFlow,
-							SrcAddr: *(*[16]byte)(flow.SrcAddr.To16()),
-							DstAddr: *(*[16]byte)(flow.DstAddr.To16()),
+							SrcAddr: flow.SrcAddr.As16(),
+							DstAddr: flow.DstAddr.As16(),
 						})
 					}
 					if err != nil {

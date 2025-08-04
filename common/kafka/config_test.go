@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"akvorado/common/helpers"
+	"akvorado/common/reporter"
 
-	"github.com/IBM/sarama"
 	"github.com/gin-gonic/gin"
 )
 
@@ -80,12 +80,10 @@ func TestKafkaNewConfig(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.description, func(t *testing.T) {
-			kafkaConfig, err := NewConfig(tc.config)
+			r := reporter.NewMock(t)
+			_, err := NewConfig(r, tc.config)
 			if err != nil {
 				t.Fatalf("NewConfig() error:\n%+v", err)
-			}
-			if err := kafkaConfig.Validate(); err != nil {
-				t.Fatalf("Validate() error:\n%+v", err)
 			}
 		})
 	}
@@ -95,13 +93,13 @@ func TestTLSConfiguration(t *testing.T) {
 	helpers.TestConfigurationDecode(t, helpers.ConfigurationDecodeCases{
 		{
 			Description:   "no TLS",
-			Initial:       func() interface{} { return DefaultConfiguration() },
-			Configuration: func() interface{} { return nil },
+			Initial:       func() any { return DefaultConfiguration() },
+			Configuration: func() any { return nil },
 			Expected:      DefaultConfiguration(),
 		}, {
 			Description: "TLS without auth",
-			Initial:     func() interface{} { return DefaultConfiguration() },
-			Configuration: func() interface{} {
+			Initial:     func() any { return DefaultConfiguration() },
+			Configuration: func() any {
 				return gin.H{
 					"tls": gin.H{
 						"enable": true,
@@ -111,7 +109,6 @@ func TestTLSConfiguration(t *testing.T) {
 			Expected: Configuration{
 				Topic:   "flows",
 				Brokers: []string{"127.0.0.1:9092"},
-				Version: Version(sarama.V2_8_1_0),
 				TLS: helpers.TLSConfiguration{
 					Enable: true,
 					Verify: true,
@@ -119,8 +116,8 @@ func TestTLSConfiguration(t *testing.T) {
 			},
 		}, {
 			Description: "TLS SASL plain, skip cert verification (old style)",
-			Initial:     func() interface{} { return DefaultConfiguration() },
-			Configuration: func() interface{} {
+			Initial:     func() any { return DefaultConfiguration() },
+			Configuration: func() any {
 				return gin.H{
 					"tls": gin.H{
 						"enable":         true,
@@ -134,7 +131,6 @@ func TestTLSConfiguration(t *testing.T) {
 			Expected: Configuration{
 				Topic:   "flows",
 				Brokers: []string{"127.0.0.1:9092"},
-				Version: Version(sarama.V2_8_1_0),
 				TLS: helpers.TLSConfiguration{
 					Enable: true,
 					Verify: false,
@@ -147,8 +143,8 @@ func TestTLSConfiguration(t *testing.T) {
 			},
 		}, {
 			Description: "TLS SASL plain, skip cert verification",
-			Initial:     func() interface{} { return DefaultConfiguration() },
-			Configuration: func() interface{} {
+			Initial:     func() any { return DefaultConfiguration() },
+			Configuration: func() any {
 				return gin.H{
 					"sasl": gin.H{
 						"username":  "hello",
@@ -160,7 +156,6 @@ func TestTLSConfiguration(t *testing.T) {
 			Expected: Configuration{
 				Topic:   "flows",
 				Brokers: []string{"127.0.0.1:9092"},
-				Version: Version(sarama.V2_8_1_0),
 				TLS: helpers.TLSConfiguration{
 					Enable: false,
 					Verify: true,
@@ -173,8 +168,8 @@ func TestTLSConfiguration(t *testing.T) {
 			},
 		}, {
 			Description: "TLS SASL SCRAM 256",
-			Initial:     func() interface{} { return DefaultConfiguration() },
-			Configuration: func() interface{} {
+			Initial:     func() any { return DefaultConfiguration() },
+			Configuration: func() any {
 				return gin.H{
 					"tls": gin.H{
 						"enable": true,
@@ -189,7 +184,6 @@ func TestTLSConfiguration(t *testing.T) {
 			Expected: Configuration{
 				Topic:   "flows",
 				Brokers: []string{"127.0.0.1:9092"},
-				Version: Version(sarama.V2_8_1_0),
 				TLS: helpers.TLSConfiguration{
 					Enable: true,
 					// Value from DefaultConfig is true
@@ -203,8 +197,8 @@ func TestTLSConfiguration(t *testing.T) {
 			},
 		}, {
 			Description: "TLS SASL OAuth",
-			Initial:     func() interface{} { return DefaultConfiguration() },
-			Configuration: func() interface{} {
+			Initial:     func() any { return DefaultConfiguration() },
+			Configuration: func() any {
 				return gin.H{
 					"tls": gin.H{
 						"enable": true,
@@ -221,7 +215,6 @@ func TestTLSConfiguration(t *testing.T) {
 			Expected: Configuration{
 				Topic:   "flows",
 				Brokers: []string{"127.0.0.1:9092"},
-				Version: Version(sarama.V2_8_1_0),
 				TLS: helpers.TLSConfiguration{
 					Enable: true,
 					// Value from DefaultConfig is true
@@ -237,8 +230,8 @@ func TestTLSConfiguration(t *testing.T) {
 			},
 		}, {
 			Description: "OAuth requires a token URL",
-			Initial:     func() interface{} { return DefaultConfiguration() },
-			Configuration: func() interface{} {
+			Initial:     func() any { return DefaultConfiguration() },
+			Configuration: func() any {
 				return gin.H{
 					"sasl": gin.H{
 						"username":  "hello",
@@ -250,8 +243,8 @@ func TestTLSConfiguration(t *testing.T) {
 			Error: true,
 		}, {
 			Description: "OAuth token URL only with OAuth",
-			Initial:     func() interface{} { return DefaultConfiguration() },
-			Configuration: func() interface{} {
+			Initial:     func() any { return DefaultConfiguration() },
+			Configuration: func() any {
 				return gin.H{
 					"sasl": gin.H{
 						"username":        "hello",

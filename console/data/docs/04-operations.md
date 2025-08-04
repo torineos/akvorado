@@ -12,15 +12,15 @@ service and accepts SNMP requests. For routers not listed below, have
 a look at the [configuration
 snippets](https://github.com/kentik/config-snippets/) from Kentik.
 
-It is better to **sample on ingress only**. This requires to sample on both
-external and internal interfaces, but this prevents flow to be accounted twice
+It is better to **sample on ingress only**. This requires sampling on both
+external and internal interfaces, but this prevents flows from being accounted twice
 when they enter and exit through external ports.
 
 ### Exporter Address
 
 The exporter address is set from the field inside the flow message by default,
-and used e.g. for SNMP requests. However, if for some reasons the set flow
-address (also called agent id) is wrong, you can use the source IP of the flow
+and used e.g. for SNMP requests. However, if for some reason the set flow
+address (also called agent ID) is wrong, you can use the source IP of the flow
 packet instead by setting `use-src-addr-for-exporter-addr: true` for the flow
 configuration.
 
@@ -29,7 +29,7 @@ source IP! This might occur with Docker or Kubernetes networking.
 
 ### Cisco IOS-XE
 
-Netflow can be enabled with the following configuration:
+NetFlow can be enabled with the following configuration:
 
 ```cisco
 flow record Akvorado
@@ -91,7 +91,7 @@ flow monitor AkvoradoMonitor-IPV6
 !
 ```
 
-To enable Netflow on an interface, use the following snippet:
+To enable NetFlow on an interface, use the following snippet:
 
 ```cisco
 interface GigabitEthernet0/0/3
@@ -102,9 +102,9 @@ interface GigabitEthernet0/0/3
 !
 ```
 
-As per [issue #89](https://github.com/akvorado/akvorado/issues/89), the sample
+As per [issue #89](https://github.com/akvorado/akvorado/issues/89), the sampling
 rate is not reported correctly on this platform. The solution is to set a
-default sample rate in `akvorado.yaml`. Check the
+default sampling rate in `akvorado.yaml`. Check the
 [documentation](02-configuration.html#core) for more details.
 
 ```yaml
@@ -115,7 +115,7 @@ inlet:
 
 ### NCS 5500 and ASR 9000
 
-On each router, Netflow can be enabled with the following configuration. It is
+On each router, NetFlow can be enabled with the following configuration. It is
 important to use a power of two for the sampling rate (at least on NCS).
 
 ```cisco
@@ -150,7 +150,7 @@ flow monitor-map monitor2
 ```
 
 Optionally, AS path can be pushed to the forwarding database and the
-source and destination AS will be present in Netflow packets:
+source and destination AS will be present in NetFlow packets:
 
 ```cisco
 router bgp <asn>
@@ -161,7 +161,7 @@ router bgp <asn>
   bgp attribute-download
 ```
 
-To enable Netflow on an interface, use the following snippet:
+To enable NetFlow on an interface, use the following snippet:
 
 ```cisco
 interface Bundle-Ether4000
@@ -171,7 +171,7 @@ interface Bundle-Ether4000
 ```
 
 Also check the [troubleshooting section](05-troubleshooting.md) on how
-to scale Netflow on the NCS 5500.
+to scale NetFlow on the NCS 5500.
 
 Then, SNMP needs to be enabled:
 
@@ -202,9 +202,9 @@ router bgp 65400
 
 ### Juniper
 
-#### Netflow
+#### NetFlow
 
-For MX and SRX devices, you can use Netflow v9 to export flows.
+For MX and SRX devices, you can use NetFlow v9 to export flows.
 
 ```junos
 groups {
@@ -423,11 +423,15 @@ snmp-server community <community> ro
 snmp-server vrf VRF-MANAGEMENT
 ```
 
-### Nokia SROS
-Model-driven command line interface (MD-CLI) syntax is used below. The full-context is provided as this is probably easier to adapt to classic CLI.
+### Nokia SR OS
+
+Model-driven command line interface (MD-CLI) syntax is used below. The
+full-context is provided as this is probably easier to adapt to classic CLI.
 
 #### Flows
-sFlow is currently merely supported on devices running SROS, one mostly has to stick to IPFIX
+
+Flow is currently barely supported on devices running SR OS, one mostly has to
+stick to IPFIX.
 
 ```
 /configure cflowd admin-state enable
@@ -442,13 +446,15 @@ sFlow is currently merely supported on devices running SROS, one mostly has to s
 /configure cflowd collector 192.0.2.1 port 2055 version 10
 ```
 
-Either configure sampling on the individual interfaces
+Either configure sampling on the individual interfaces:
+
 ```
 /configure service ies "internet" interface "if1/1/c1/1:0" cflowd-parameters sampling unicast type interface
 /configure service ies "internet" interface "if1/1/c1/1:0" cflowd-parameters sampling unicast direction ingress-only
 /configure service ies "internet" interface "if1/1/c1/1:0" cflowd-parameters sampling unicast sample-profile 1
 ```
-or add it to apply groups which are probably already in place
+
+Or add it to apply groups which are probably already in place:
 
 ```
 /configure groups group "peering" service ies "internet" interface "<i.*>" cflowd-parameters sampling unicast type interface
@@ -459,26 +465,28 @@ or add it to apply groups which are probably already in place
 ```
 
 #### SNMP
-Nokia routers running SROS use a different interface index in their flow records
-as the SNMP interface index usually used by other devices. To fix this issue,
-you need to use `cflowd use-vrtr-if-index`. More information can be found in
-[Nokia's
-documentation](https://infocenter.nokia.com/public/7750SR140R4/topic/com.sr.router.config/html/cflowd_cli.html#tgardner5iexrn6muno)
+
+Nokia routers running SR OS use a different interface index in their flow
+records as the SNMP interface index usually used by other devices. To fix this
+issue, you need to use `cflowd use-vrtr-if-index`. More information can be found
+in [Nokia's
+documentation](https://infocenter.nokia.com/public/7750SR140R4/topic/com.sr.router.config/html/cflowd_cli.html#tgardner5iexrn6muno).
 
 #### GNMI
-Instead of SNMP GNMI can be used. The interface index challenge (see `SNMP` above) also applies. See this [discussion](https://github.com/akvorado/akvorado/discussions/1275) for further details and possible workarounds.
 
-Unencrypted connections are used in this example (TLS encyption is out of scope here), do not use in production (or at least ensure the user has RO only permissions)
+Instead of SNMP GNMI can be used. The interface index challenge (see `SNMP`
+above) also applies. See this
+[discussion](https://github.com/akvorado/akvorado/discussions/1275) for further
+details and possible workarounds.
+
+In the below example, unencrupted connections are used. Check the documentation
+if you want to enable TLS for a more secure setup.
+
 ```
 /configure system grpc admin-state enable
 /configure system grpc allow-unsecure-connection
-```
-Akvorado only needs Read-Only access
-```
 /configure system security user-params local-user user "akvorado" access grpc true
 /configure system security user-params local-user user "akvorado" console member ["grpc_ro"]
-```
-```
 /configure system security aaa local-profiles profile "grpc_ro" grpc rpc-authorization gnmi-get permit
 /configure system security aaa local-profiles profile "grpc_ro" grpc rpc-authorization gnmi-set deny
 /configure system security aaa local-profiles profile "grpc_ro" grpc rpc-authorization gnmi-subscribe permit
@@ -536,9 +544,9 @@ Configure pmacctd with sFlow receiver:
   ifindex=4 ifname=eth1 direction=out
 ```
 
-Here we `set` the interface indexes manually entirely based on the interface
+Here we set the interface indexes manually entirely based on the interface
 names and completely ignoring the kernel ifIndex for the flows. pmacctd can
-be run inside containers where SNMPd does not return description for the
+be run inside containers where SNMPd does not return descriptions for the
 interfaces, which is a required field for the flow. With this setup, you can
 make use of the static metadata provider to match the exporter and accept the
 flow for further classification.
@@ -551,7 +559,7 @@ metrics you can check, notably the space used by each topic.
 
 ## ClickHouse
 
-While ClickHouse works pretty good out-of-the-box, it is still
+While ClickHouse works pretty well out-of-the-box, it is still
 encouraged to read [its documentation](https://clickhouse.com/docs/).
 Altinity also provides a [knowledge base](https://kb.altinity.com/)
 with various other tips.
@@ -561,7 +569,7 @@ with various other tips.
 ClickHouse is configured to log various events into MergeTree tables. By
 default, these tables are unbounded. Unless configured otherwise, the
 orchestrator sets a TTL of 30 days. These tables can also be customized in the
-configuration files or disabled completly. See [ClickHouse
+configuration files or disabled completely. See [ClickHouse
 documentation](https://clickhouse.com/docs/en/operations/system-tables/) for
 more details.
 
@@ -590,6 +598,13 @@ FROM system.dictionaries
 
 ### Space usage
 
+To get the space used by ClickHouse, use the following query:
+
+```sql
+SELECT formatReadableSize(sum(bytes_on_disk)) AS size
+FROM system.parts
+```
+
 You can get an idea on how much space is used by each table with the
 following query:
 
@@ -600,7 +615,7 @@ WHERE table LIKE 'flow%'
 GROUP by table
 ```
 
-The following query shows how much space is eaten by each column for the `flows`
+The following query shows how much space is used by each column for the `flows`
 table and how much they are compressed. This can be helpful if you find too much
 space is used by this table.
 
@@ -630,6 +645,28 @@ ORDER BY
     sum(column_data_compressed_bytes) DESC
 ```
 
+You can also have a look at the system tables:
+
+```sql
+SELECT * EXCEPT size, formatReadableSize(size) AS size FROM (
+ SELECT database, table, sum(bytes_on_disk) AS size, MIN(partition_id) AS oldest
+ FROM system.parts
+ GROUP by database, table
+ ORDER by size DESC
+)
+```
+
+All the system tables with suffix `_0`, `_1` are tables from an older version of
+ClickHouse. You can drop them by using this SQL query and copy-pasting the
+result:
+
+```sql
+SELECT concat('DROP TABLE IF EXISTS system.', name, ';')
+FROM system.tables
+WHERE (database = 'system') AND match(name, '_[0-9]+$')
+FORMAT TSVRaw
+```
+
 ### Slow queries
 
 You can extract slow queries with:
@@ -646,3 +683,16 @@ FORMAT Vertical
 [Altinity's knowledge
 base](https://kb.altinity.com/altinity-kb-useful-queries/query_log/)
 contains some other useful queries.
+
+### Old tables
+
+Tables not used anymore may still be around check with `SHOW TABLES`. You can
+drop the following tables:
+
+- `flows_raw_errors`
+- `flows_raw_errors_consumer`
+- any `flows_XXXXXXX_raw_errors`
+- any `flows_XXXXXXX_raw` and `flows_XXXXXXX_raw_consumer` when `XXXXXXX` does not end with `vN` where `N` is a number
+- any `flows_XXXXXvN_raw` and `flows_XXXXXvN_raw_consumer` when another table exists with a higher `N` value
+
+These tables do not contain data. If you make a mistake, you can restart the orchestrator to recreate them.

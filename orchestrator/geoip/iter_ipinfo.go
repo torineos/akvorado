@@ -4,20 +4,76 @@
 package geoip
 
 import (
+	"errors"
 	"strconv"
 
-	"github.com/oschwald/maxminddb-golang"
+	"github.com/oschwald/maxminddb-golang/v2"
+	"github.com/oschwald/maxminddb-golang/v2/mmdbdata"
 )
 
-type ipinfoDBASN struct {
-	ASN    string `maxminddb:"asn"`
-	ASName string `maxminddb:"as_name"`
+// ipinfoGeoInfo is an alias for GeoInfo with ipinfo-specific unmarshaling
+type ipinfoGeoInfo GeoInfo
+
+// UnmarshalMaxMindDB implements custom unmarshaling for ipinfo geo format
+func (g *ipinfoGeoInfo) UnmarshalMaxMindDB(d *mmdbdata.Decoder) error {
+	mapIter, _, err := d.ReadMap()
+	if err != nil {
+		return err
+	}
+
+	for key, err := range mapIter {
+		if err != nil {
+			return err
+		}
+		switch string(key) {
+		case "country":
+			g.Country, err = d.ReadString()
+		case "region":
+			g.State, err = d.ReadString()
+		case "city":
+			g.City, err = d.ReadString()
+		default:
+			err = d.SkipValue()
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-type ipinfoDBCountry struct {
-	Country string `maxminddb:"country"`
-	Region  string `maxminddb:"region"`
-	City    string `maxminddb:"city"`
+// ipinfoASNInfo is an alias for ASNInfo with ipinfo-specific unmarshaling
+type ipinfoASNInfo ASNInfo
+
+// UnmarshalMaxMindDB implements custom unmarshaling for ipinfo ASN format
+func (a *ipinfoASNInfo) UnmarshalMaxMindDB(d *mmdbdata.Decoder) error {
+	mapIter, _, err := d.ReadMap()
+	if err != nil {
+		return err
+	}
+
+	for key, err := range mapIter {
+		if err != nil {
+			return err
+		}
+		switch string(key) {
+		case "asn":
+			asnStr, err := d.ReadString()
+			// Parse ASN from "ASxxxx" format
+			if err == nil && len(asnStr) > 2 && asnStr[:2] == "AS" {
+				if num, err := strconv.ParseUint(asnStr[2:], 10, 32); err == nil {
+					a.ASNumber = uint32(num)
+					continue
+				}
+			}
+			return errors.New("invalid AS number")
+		default:
+			if err := d.SkipValue(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 type ipinfoDB struct {
@@ -25,23 +81,16 @@ type ipinfoDB struct {
 }
 
 func (mmdb *ipinfoDB) IterASNDatabase(f AsnIterFunc) error {
-	it := mmdb.db.Networks()
-	maxminddb.SkipAliasedNetworks(it)
-	for it.Next() {
-		asnInfo := &ipinfoDBASN{}
-		subnet, err := it.Network(asnInfo)
+	for result := range mmdb.db.Networks() {
+		var asnInfo ipinfoASNInfo
 
-		if err != nil {
-			return err
+		err := result.Decode(&asnInfo)
+		if err != nil || asnInfo.ASNumber == 0 {
+			continue
 		}
-		n, err := strconv.ParseUint(asnInfo.ASN[2:], 10, 32)
-		if err != nil {
-			return err
-		}
-		if err := f(subnet, ASNInfo{
-			ASNumber: uint32(n),
-			ASName:   asnInfo.ASName,
-		}); err != nil {
+
+		prefix := result.Prefix()
+		if err := f(prefix, ASNInfo(asnInfo)); err != nil {
 			return err
 		}
 	}
@@ -49,20 +98,16 @@ func (mmdb *ipinfoDB) IterASNDatabase(f AsnIterFunc) error {
 }
 
 func (mmdb *ipinfoDB) IterGeoDatabase(f GeoIterFunc) error {
-	it := mmdb.db.Networks()
-	maxminddb.SkipAliasedNetworks(it)
-	for it.Next() {
-		geoInfo := &ipinfoDBCountry{}
-		subnet, err := it.Network(geoInfo)
+	for result := range mmdb.db.Networks() {
+		var geoInfo ipinfoGeoInfo
 
-		if err != nil {
-			return err
+		err := result.Decode(&geoInfo)
+		if err != nil || geoInfo.Country == "" {
+			continue
 		}
-		if err := f(subnet, GeoInfo{
-			Country: geoInfo.Country,
-			State:   geoInfo.Region,
-			City:    geoInfo.City,
-		}); err != nil {
+
+		prefix := result.Prefix()
+		if err := f(prefix, GeoInfo(geoInfo)); err != nil {
 			return err
 		}
 	}

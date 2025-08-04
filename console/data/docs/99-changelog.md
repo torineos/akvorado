@@ -6,19 +6,64 @@ identified with a specific icon:
 
 - 💥: breaking change
 - ✨: new feature
-- 🗑: removed feature
 - 🔒: security fix
 - 🩹: bug fix
 - 🌱: miscellaneous change
 
 ## Unreleased
 
+- 💥 *common*: be stricter on results returned from remote sources
+- 🌱 *outlet*: commit records from Kafka after queuing them to ClickHouse
+- 🌱 *docker*: build a linux/amd64/v3 image to enable some optimizations
+- 🌱 *docker*: change default log level for ClickHouse from trace to information
+- 🌱 *docker*: switch from Provectus Kafka UI (unmaintained) to Kafbat UI
+- 🌱 *docker*: expose metrics and Kafka UI (read-only) to the public endpoint
+
+## 2.0.0-beta.1 - 2025-07-28
+
+> [!CAUTION]
+> This is a beta release!
+
+This release introduce a new component: the outlet. Previously, ClickHouse was
+fetching data directly from Kafka. However, this required to push the protobuf
+schema using an out-of-band method. This makes cloud deployments more complex.
+The inlet now pushes incoming raw flows to Kafka without decoding them. The
+outlet takes them, decode them, enriches them, and push them to ClickHouse. This
+also reduces the likeliness to lose packets. This change should be transparent
+on most setups but you are encouraged to review the new proposed configuration
+in the [quickstart tarball][] and update your own configuration.
+
+As it seems a good time as any, Zookeeper is removed from the `docker compose`
+setup. ClickHouse Keeper is used instead when setting up a cluster. Kafka is now
+using the KRaft mode. While migration is possible, it is easier to start from
+scratch:
+
+```console
+# docker compose down --remove-orphans
+# docker compose rm -v kafka
+# docker compose pull
+# docker compose up -d
+```
+
+- 💥 *outlet*: new service
+- 💥 *inlet*: flow rate limiting feature has been removed
+- 💥 *docker*: rename `docker-compose-monitoring.yml` to
+  `docker-compose-prometheus.yml` (you need to update your `.env` if you were
+  using it)
+- 💥 *docker*: switch to Apache Kafka 4.0
+- 💥 *docker*: switch Kafka to KRaft mode
 - 🩹 *console*: fix deletion of saved filters
+- 🩹 *console*: fix intermittent failure when requesting previous period
 - 🩹 *docker*: move healthcheck for IPinfo updater into Dockerfile to avoid
   "unhealthy" state on non-updated installation
 - 🌱 *docker*: enable access log for Traefik
+- 🌱 *docker*: update ClickHouse to 25.3 (not mandatory)
 - 🌱 *docker*: update Traefik to 3.4 (not mandatory)
+- 🌱 *docker*: switch to Prometheus Java Agent exporter for Kafka
+- 🌱 *orchestrator*: move ClickHouse database settings from `clickhouse` to `clickhousedb`
 - 🌱 *inlet*: improve performance of classifiers
+
+[quickstart tarball]: https://github.com/akvorado/akvorado/releases/latest/download/docker-compose-quickstart.tar.gz
 
 ## 1.11.5 - 2025-05-11
 
@@ -83,7 +128,7 @@ tarball". This new tarball does not upgrade the configuration files, nor the
 - 💥 *console*: persist metadata cache on the default `docker compose` setup
 - 🩹 *orchestrator*: fix population of `DstNetSite` and `SrcNetSite`
 - 🩹 *orchestrator*: remove previous networks.csv temporary files on start
-- 🌱 *inlet*: add support Netflow V5
+- 🌱 *inlet*: add support NetFlow V5
 - 🌱 *console*: add support for PostgreSQL and MySQL to store filters
 - 🌱 *console*: add `console`→`homepage-graph-timerange` to define the time range for the homepage graph
 - 🌱 *console*: enable round-robin for ClickHouse connections
@@ -141,7 +186,7 @@ can install the `docker-compose-v2` package. For other options, check the
 - ✨ *inlet*: static metadata provider can fetch its configuration from an HTTP endpoint
 - ✨ *inlet*: metadata can be fetched from multiple providers (eg, static, then SNMP)
 - ✨ *inlet*: add support for several SNMPv2 communities
-- ✨ *inlet*: timestamps for Netflow/IPFIX can now be retrieved from packet content, see `inlet`→`flow`→`inputs`→`timestamp-source`
+- ✨ *inlet*: timestamps for NetFlow/IPFIX can now be retrieved from packet content, see `inlet`→`flow`→`inputs`→`timestamp-source`
 - 🩹 *cmd*: fix parsing of `inlet`→`metadata`→`provider`→`ports`
 - 🩹 *console*: fix use of `InIfBoundary` and `OutIfBoundary` as dimensions
 - 🌱 *orchestrator*: add TLS support to connect to ClickHouse database
@@ -205,8 +250,8 @@ can install the `docker-compose-v2` package. For other options, check the
 - ✨ *orchestrator*: add custom dictionaries for additional flow hydration. See
   `orchestrator`→`schema`→`custom-dictionaries`. Currently, filtering on the
   generated data is not available.
-- 🩹 *inlet*: fix Netflow processing when template is received with data
-- 🩹 *inlet*: use sampling rate in Netflow data packet if available
+- 🩹 *inlet*: fix NetFlow processing when template is received with data
+- 🩹 *inlet*: use sampling rate in NetFlow data packet if available
 - 🩹 *console*: fix display when using “%” units and interface speed is 0
 - 🩹 *orchestrator*: create flows table with
   `allow_suspicious_low_cardinality_types` to ensure we can use
