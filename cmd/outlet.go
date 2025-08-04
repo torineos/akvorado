@@ -20,6 +20,7 @@ import (
 	"akvorado/outlet/clickhouse"
 	"akvorado/outlet/core"
 	"akvorado/outlet/flow"
+	"akvorado/outlet/hostname"
 	"akvorado/outlet/kafka"
 	"akvorado/outlet/metadata"
 	"akvorado/outlet/metadata/provider/snmp"
@@ -38,6 +39,8 @@ type OutletConfiguration struct {
 	ClickHouse   clickhouse.Configuration
 	Core         core.Configuration
 	Schema       schema.Configuration
+
+	Hostname hostname.Configuration
 }
 
 // Reset resets the configuration for the outlet command to its default value.
@@ -52,9 +55,11 @@ func (c *OutletConfiguration) Reset() {
 		ClickHouse:   clickhouse.DefaultConfiguration(),
 		Core:         core.DefaultConfiguration(),
 		Schema:       schema.DefaultConfiguration(),
+		Hostname:     hostname.DefaultConfiguration(),
 	}
 	c.Metadata.Providers = []metadata.ProviderConfiguration{{Config: snmp.DefaultConfiguration()}}
 	c.Routing.Provider.Config = bmp.DefaultConfiguration()
+	c.Hostname = hostname.DefaultConfiguration()
 }
 
 type outletOptions struct {
@@ -148,6 +153,12 @@ func outletStart(r *reporter.Reporter, config OutletConfiguration, checkOnly boo
 	if err != nil {
 		return fmt.Errorf("unable to initialize outlet ClickHouse component: %w", err)
 	}
+	hostnameComponent, err := hostname.New(r, config.Hostname, hostname.Dependencies{
+		Daemon: daemonComponent,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to initialize Hostname component: %w", err)
+	}
 	coreComponent, err := core.New(r, config.Core, core.Dependencies{
 		Daemon:     daemonComponent,
 		Flow:       flowComponent,
@@ -157,6 +168,7 @@ func outletStart(r *reporter.Reporter, config OutletConfiguration, checkOnly boo
 		ClickHouse: clickhouseComponent,
 		HTTP:       httpComponent,
 		Schema:     schemaComponent,
+		Hostname:   hostnameComponent,
 	})
 	if err != nil {
 		return fmt.Errorf("unable to initialize core component: %w", err)
@@ -181,6 +193,7 @@ func outletStart(r *reporter.Reporter, config OutletConfiguration, checkOnly boo
 		routingComponent,
 		kafkaComponent,
 		coreComponent,
+		hostnameComponent,
 	}
 	return StartStopComponents(r, daemonComponent, components)
 }

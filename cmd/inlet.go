@@ -14,7 +14,6 @@ import (
 	"akvorado/common/schema"
 	"akvorado/inlet/flow"
 	"akvorado/outlet/core"
-	"akvorado/outlet/hostname"
 	"akvorado/outlet/kafka"
 )
 
@@ -26,8 +25,6 @@ type InletConfiguration struct {
 	Kafka     kafka.Configuration
 	Core      core.Configuration
 	Schema    schema.Configuration
-
-	Hostname hostname.Configuration
 }
 
 // Reset resets the configuration for the inlet command to its default value.
@@ -37,8 +34,6 @@ func (c *InletConfiguration) Reset() {
 		Reporting: reporter.DefaultConfiguration(),
 		Flow:      flow.DefaultConfiguration(),
 		Kafka:     kafka.DefaultConfiguration(),
-
-		Hostname: hostname.DefaultConfiguration(),
 	}
 }
 

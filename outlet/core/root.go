@@ -16,6 +16,7 @@ import (
 	"akvorado/common/schema"
 	"akvorado/outlet/clickhouse"
 	"akvorado/outlet/flow"
+	"akvorado/outlet/hostname"
 	"akvorado/outlet/kafka"
 	"akvorado/outlet/metadata"
 	"akvorado/outlet/routing"
@@ -49,6 +50,7 @@ type Dependencies struct {
 	ClickHouse clickhouse.Component
 	HTTP       *httpserver.Component
 	Schema     *schema.Component
+	Hostname   *hostname.Component
 }
 
 // New creates a new core component.

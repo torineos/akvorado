@@ -1,6 +1,5 @@
 ---
 metadata:
-  cache: 1
   provider:
     type: snmp
     credentials:
@@ -26,5 +25,5 @@ core:
       ClassifyProviderRegex(Interface.Description, "^\\S+?\\s(\\S+)", "$1") &&
       ClassifyExternal()
     - ClassifyInternal()
-  hostname:
-    enable: true
+hostname:
+  enable: true
