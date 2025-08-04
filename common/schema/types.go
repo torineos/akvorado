@@ -68,4 +68,3 @@ type ColumnGroup uint
 
 // UInt128 is an unsigned 128-bit number
 type UInt128 = proto.UInt128
-

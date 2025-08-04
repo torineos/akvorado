@@ -13,7 +13,7 @@ import (
 	"akvorado/common/schema"
 	"akvorado/outlet/flow/decoder"
 
-	//"akvorado/inlet/hostname"
+	//"akvorado/outlet/hostname"
 
 	"github.com/netsampler/goflow2/v2/decoders/netflow"
 	"github.com/netsampler/goflow2/v2/decoders/netflowlegacy"

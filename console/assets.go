@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-//go:embed data/frontend
+//go:embed frontend
 var embeddedAssets embed.FS
 
 func (c *Component) assetsHandlerFunc(w http.ResponseWriter, req *http.Request) {

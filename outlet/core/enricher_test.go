@@ -22,19 +22,12 @@ import (
 	"akvorado/common/pb"
 	"akvorado/common/reporter"
 	"akvorado/common/schema"
-<<<<<<< HEAD:inlet/core/enricher_test.go
-	"akvorado/inlet/flow"
-	"akvorado/inlet/kafka"
-	"akvorado/inlet/metadata"
-	"akvorado/inlet/routing"
-	//"akvorado/inlet/hostname"
-=======
 	"akvorado/outlet/clickhouse"
 	"akvorado/outlet/flow"
 	"akvorado/outlet/kafka"
 	"akvorado/outlet/metadata"
 	"akvorado/outlet/routing"
->>>>>>> main:outlet/core/enricher_test.go
+	//"akvorado/outlet/hostname"
 )
 
 func TestEnrich(t *testing.T) {
@@ -591,10 +584,6 @@ ClassifyProviderRegex(Interface.Description, "^Transit: ([^ ]+)", "$1")`,
 			OutputFlow: &schema.FlowMessage{
 				ExporterAddress: netip.MustParseAddr("::ffff:192.0.2.142"),
 				SrcAddr:         netip.MustParseAddr("::ffff:192.0.2.142"),
-				ProtobufDebug: map[schema.ColumnKey]interface{}{
-					schema.ColumnSrcHostname: "test",
-					schema.ColumnDstHostname: "test",
-				},
 			},
 		},
 	}
@@ -613,9 +602,6 @@ ClassifyProviderRegex(Interface.Description, "^Transit: ([^ ]+)", "$1")`,
 			httpComponent := httpserver.NewMock(t, r)
 			routingComponent := routing.NewMock(t, r)
 			routingComponent.PopulateRIB(t)
-<<<<<<< HEAD:inlet/core/enricher_test.go
-			//hostnameComponent := hostname.NewMock(t, r, hostname.DefaultConfiguration())
-=======
 			kafkaComponent, incoming := kafka.NewMock(t, kafka.DefaultConfiguration())
 			var clickhouseMessages []*schema.FlowMessage
 			var clickhouseMessagesMutex sync.Mutex
@@ -624,7 +610,6 @@ ClassifyProviderRegex(Interface.Description, "^Transit: ([^ ]+)", "$1")`,
 				defer clickhouseMessagesMutex.Unlock()
 				clickhouseMessages = append(clickhouseMessages, msg)
 			})
->>>>>>> main:outlet/core/enricher_test.go
 
 			// Prepare a configuration
 			configuration := DefaultConfiguration()
@@ -638,16 +623,6 @@ ClassifyProviderRegex(Interface.Description, "^Transit: ([^ ]+)", "$1")`,
 
 			// Instantiate and start core
 			c, err := New(r, configuration, Dependencies{
-<<<<<<< HEAD:inlet/core/enricher_test.go
-				Daemon:   daemonComponent,
-				Flow:     flowComponent,
-				Metadata: metadataComponent,
-				Kafka:    kafkaComponent,
-				HTTP:     httpComponent,
-				Routing:  routingComponent,
-				Schema:   schema.NewMock(t),
-				//Hostname: hostnameComponent,
-=======
 				Daemon:     daemonComponent,
 				Flow:       flowComponent,
 				Metadata:   metadataComponent,
@@ -656,7 +631,6 @@ ClassifyProviderRegex(Interface.Description, "^Transit: ([^ ]+)", "$1")`,
 				HTTP:       httpComponent,
 				Routing:    routingComponent,
 				Schema:     schema.NewMock(t),
->>>>>>> main:outlet/core/enricher_test.go
 			})
 			if err != nil {
 				t.Fatalf("New() error:\n%+v", err)

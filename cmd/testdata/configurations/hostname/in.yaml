@@ -1,4 +1,4 @@
 ---
-inlet:
+outlet:
   hostname:
     enable: true

@@ -11,9 +11,11 @@ import (
 	"akvorado/common/daemon"
 	"akvorado/common/httpserver"
 	"akvorado/common/reporter"
+	"akvorado/common/schema"
 	"akvorado/inlet/flow"
-	"akvorado/inlet/hostname"
-	"akvorado/inlet/kafka"
+	"akvorado/outlet/core"
+	"akvorado/outlet/hostname"
+	"akvorado/outlet/kafka"
 )
 
 // InletConfiguration represents the configuration file for the inlet command.
@@ -99,8 +101,6 @@ func inletStart(r *reporter.Reporter, config InletConfiguration, checkOnly bool)
 	flowComponent, err := flow.New(r, config.Flow, flow.Dependencies{
 		Daemon: daemonComponent,
 		HTTP:   httpComponent,
-		Kafka:  kafkaComponent,
-		Hostname: hostnameComponent,
 	})
 	if err != nil {
 		return fmt.Errorf("unable to initialize flow component: %w", err)
@@ -120,7 +120,6 @@ func inletStart(r *reporter.Reporter, config InletConfiguration, checkOnly bool)
 		httpComponent,
 		kafkaComponent,
 		flowComponent,
-		hostnameComponent,
 	}
 	return StartStopComponents(r, daemonComponent, components)
 }

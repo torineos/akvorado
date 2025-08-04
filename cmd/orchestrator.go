@@ -10,7 +10,6 @@ import (
 	"slices"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gin-gonic/gin"
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/cobra"
 
@@ -432,89 +431,6 @@ func orchestratorInletToOutletMigrationHook() mapstructure.DecodeHookFunc {
 		}
 
 		return from.Interface(), nil
-	}
-}
-
-// orchestratorInletToOutletMigrationHook migrates inlet configuration to outlet
-// configuration. This only works if there is no outlet configuration and if
-// there is only one inlet configuration.
-func orchestratorInletToOutletMigrationHook() mapstructure.DecodeHookFunc {
-	return func(from, to reflect.Value) (any, error) {
-		if from.Kind() != reflect.Map || from.IsNil() || to.Type() != reflect.TypeOf(OrchestratorConfiguration{}) {
-			return from.Interface(), nil
-		}
-
-		// inlet fields (Metadata, Routing, Core, Schema) → outlet
-		var inletKey, outletKey *reflect.Value
-		fromKeys := from.MapKeys()
-		for i, k := range fromKeys {
-			k = helpers.ElemOrIdentity(k)
-			if k.Kind() != reflect.String {
-				continue
-			}
-			if helpers.MapStructureMatchName(k.String(), "Inlet") {
-				inletKey = &fromKeys[i]
-			} else if helpers.MapStructureMatchName(k.String(), "Outlet") {
-				outletKey = &fromKeys[i]
-			}
-		}
-
-		if inletKey != nil {
-			inletConfigs := helpers.ElemOrIdentity(from.MapIndex(*inletKey))
-			if inletConfigs.Kind() != reflect.Slice {
-				inletConfigs = reflect.ValueOf([]any{inletConfigs.Interface()})
-			}
-
-			// Fields to migrate from inlet to outlet
-			fieldsToMigrate := []string{
-				// Current keys
-				"Metadata", "Routing", "Core", "Schema",
-				// Older keys (which will be migrated)
-				"BMP", "SNMP",
-			}
-
-			// Process each inlet configuration
-			for i := range inletConfigs.Len() {
-				fromInlet := helpers.ElemOrIdentity(inletConfigs.Index(i))
-				if fromInlet.Kind() != reflect.Map {
-					continue
-				}
-				modified := false
-				toOutlet := reflect.ValueOf(gin.H{})
-
-				// Migrate fields from inlet to outlet
-				fromInletKeys := fromInlet.MapKeys()
-				for _, k := range fromInletKeys {
-					k = helpers.ElemOrIdentity(k)
-					if k.Kind() != reflect.String {
-						continue
-					}
-					for _, field := range fieldsToMigrate {
-						if !helpers.MapStructureMatchName(k.String(), field) {
-							continue
-						}
-						// We can only do a migration if we have no existing
-						// outlet configuration AND only one inlet configuration.
-						if outletKey != nil {
-							return nil, fmt.Errorf("cannot have both \"inlet\" configuration with %q field and \"outlet\" configuration", field)
-						}
-						if inletConfigs.Len() > 1 {
-							return nil, fmt.Errorf("cannot migrate %q from %q to %q as there are several inlet configurations", field, "inlet", "outlet")
-						}
-						toOutlet.SetMapIndex(k, helpers.ElemOrIdentity(fromInlet.MapIndex(k)))
-						fromInlet.SetMapIndex(k, reflect.Value{})
-						modified = true
-						break
-					}
-				}
-
-				if modified {
-					// We know there is no existing outlet configuration.
-					outletConfigs := reflect.ValueOf([]any{toOutlet})
-					from.SetMapIndex(reflect.ValueOf("outlet"), outletConfigs)
-				}
-			}
-		}
 	}
 }
 
