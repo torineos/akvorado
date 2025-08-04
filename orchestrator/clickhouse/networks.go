@@ -7,7 +7,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/csv"
-	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -57,8 +57,8 @@ func (c *Component) networksCSVRefresher() {
 		networks := helpers.MustNewSubnetMap[NetworkAttributes](nil)
 
 		// Add content of all geoip databases
-		err := c.d.GeoIP.IterASNDatabases(func(subnet *net.IPNet, data geoip.ASNInfo) error {
-			subV6Str, err := helpers.SubnetMapParseKey(subnet.String())
+		err := c.d.GeoIP.IterASNDatabases(func(prefix netip.Prefix, data geoip.ASNInfo) error {
+			subV6Str, err := helpers.SubnetMapParseKey(prefix.String())
 			if err != nil {
 				return err
 			}
@@ -71,8 +71,8 @@ func (c *Component) networksCSVRefresher() {
 			c.r.Err(err).Msg("unable to iter over ASN databases")
 			return
 		}
-		err = c.d.GeoIP.IterGeoDatabases(func(subnet *net.IPNet, data geoip.GeoInfo) error {
-			subV6Str, err := helpers.SubnetMapParseKey(subnet.String())
+		err = c.d.GeoIP.IterGeoDatabases(func(prefix netip.Prefix, data geoip.GeoInfo) error {
+			subV6Str, err := helpers.SubnetMapParseKey(prefix.String())
 			if err != nil {
 				return err
 			}
@@ -184,12 +184,14 @@ func (c *Component) networksCSVRefresher() {
 			once = false
 		}
 
-		ctx, cancel := context.WithTimeout(c.t.Context(nil), time.Minute)
-		defer cancel()
-		c.metrics.networksReload.Inc()
-		if err := c.ReloadDictionary(ctx, schema.DictionaryNetworks); err != nil {
-			c.r.Err(err).Msg("failed to refresh networks dictionary")
-		}
+		func() {
+			ctx, cancel := context.WithTimeout(c.t.Context(nil), time.Minute)
+			defer cancel()
+			c.metrics.networksReload.Inc()
+			if err := c.ReloadDictionary(ctx, schema.DictionaryNetworks); err != nil {
+				c.r.Err(err).Msg("failed to refresh networks dictionary")
+			}
+		}()
 	}
 }
 

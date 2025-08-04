@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2022 Free Mobile
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Package flows simulates a Netflow exporter
+// Package flows simulates a NetFlow exporter
 package flows
 
 import (
@@ -87,7 +87,7 @@ func (c *Component) Start() error {
 			for payload := range payloads {
 				sequenceNumber++
 				if _, err := conn.Write(payload); err != nil {
-					c.metrics.errors.WithLabelValues(err.Error()).Inc()
+					c.metrics.errors.WithLabelValues("cannot write").Inc()
 					errLogger.Err(err).Msg("unable to send UDP payload")
 				} else {
 					c.metrics.sent.WithLabelValues(kind).Inc()
@@ -101,14 +101,14 @@ func (c *Component) Start() error {
 			case now := <-ticker.C:
 				if templateCount%30 == 0 {
 					transmit("template",
-						getNetflowTemplates(ctx, sequenceNumber,
+						getNetFlowTemplates(ctx, sequenceNumber,
 							c.config.SamplingRate,
 							start, now))
 				}
 				templateCount++
 				flows := generateFlows(c.config.Flows, c.config.Seed, now)
 				transmit("data",
-					getNetflowData(ctx, flows, sequenceNumber,
+					getNetFlowData(ctx, flows, sequenceNumber,
 						start, now))
 			}
 		}

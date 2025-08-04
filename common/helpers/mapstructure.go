@@ -21,10 +21,61 @@ func RegisterMapstructureUnmarshallerHook(hook mapstructure.DecodeHookFunc) {
 	mapstructureUnmarshallerHookFuncs = append(mapstructureUnmarshallerHookFuncs, hook)
 }
 
+// RegisterMapstructureDeprecatedFields registers a decoder hook removing
+// deprecated fields. This should only be done during init.
+func RegisterMapstructureDeprecatedFields[V any](fieldNames ...string) {
+	RegisterMapstructureUnmarshallerHook(func(from, to reflect.Value) (any, error) {
+		var zeroV V
+		from = ElemOrIdentity(from)
+		to = ElemOrIdentity(to)
+		if !SameTypeOrSuperset(to.Type(), reflect.TypeOf(zeroV)) {
+			return from.Interface(), nil
+		}
+		if from.Kind() != reflect.Map {
+			return from.Interface(), nil
+		}
+
+		mapKeys := from.MapKeys()
+		for _, key := range mapKeys {
+			var keyStr string
+			if ElemOrIdentity(key).Kind() == reflect.String {
+				keyStr = ElemOrIdentity(key).String()
+			} else {
+				continue
+			}
+			for _, fieldName := range fieldNames {
+				if MapStructureMatchName(keyStr, fieldName) {
+					from.SetMapIndex(key, reflect.Value{})
+				}
+			}
+		}
+
+		return from.Interface(), nil
+	})
+}
+
+// SameTypeOrSuperset returns true if "input" and "ref" type are the same or
+// when "input" has "ref" as a squashed field.
+func SameTypeOrSuperset(input, ref reflect.Type) bool {
+	if input == ref {
+		return true
+	}
+	if input.Kind() != reflect.Struct {
+		return false
+	}
+	for i := 0; i < input.NumField(); i++ {
+		field := input.Field(i)
+		if tag := field.Tag.Get("mapstructure"); tag == ",squash" && field.Type == ref {
+			return true
+		}
+	}
+	return false
+}
+
 // GetMapStructureDecoderConfig returns a decoder config for
 // mapstructure with all registered hooks as well as appropriate
 // default configuration.
-func GetMapStructureDecoderConfig(config interface{}, hooks ...mapstructure.DecodeHookFunc) *mapstructure.DecoderConfig {
+func GetMapStructureDecoderConfig(config any, hooks ...mapstructure.DecodeHookFunc) *mapstructure.DecoderConfig {
 	return &mapstructure.DecoderConfig{
 		Result:           config,
 		ErrorUnused:      true,
@@ -48,8 +99,8 @@ func StringToSliceHookFunc(sep string) mapstructure.DecodeHookFunc {
 	return func(
 		f reflect.Kind,
 		t reflect.Kind,
-		data interface{},
-	) (interface{}, error) {
+		data any,
+	) (any, error) {
 		if f != reflect.String || t != reflect.Slice {
 			return data, nil
 		}
@@ -65,7 +116,7 @@ func StringToSliceHookFunc(sep string) mapstructure.DecodeHookFunc {
 
 // ProtectedDecodeHookFunc wraps a DecodeHookFunc to recover and returns an error on panic.
 func ProtectedDecodeHookFunc(hook mapstructure.DecodeHookFunc) mapstructure.DecodeHookFunc {
-	return func(from, to reflect.Value) (v interface{}, err error) {
+	return func(from, to reflect.Value) (v any, err error) {
 		defer func() {
 			if r := recover(); r != nil {
 				v = nil
@@ -86,7 +137,7 @@ func MapStructureMatchName(mapKey, fieldName string) bool {
 // DefaultValuesUnmarshallerHook adds default values from the provided
 // configuration. For each missing non-default key, it will add them.
 func DefaultValuesUnmarshallerHook[Configuration any](defaultConfiguration Configuration) mapstructure.DecodeHookFunc {
-	return func(from, to reflect.Value) (interface{}, error) {
+	return func(from, to reflect.Value) (any, error) {
 		from = ElemOrIdentity(from)
 		to = ElemOrIdentity(to)
 		if to.Type() != reflect.TypeOf(defaultConfiguration) {
@@ -129,7 +180,7 @@ func DefaultValuesUnmarshallerHook[Configuration any](defaultConfiguration Confi
 
 // RenameKeyUnmarshallerHook move a configuration setting from one place to another.
 func RenameKeyUnmarshallerHook[Configuration any](zeroConfiguration Configuration, fromLabel, toLabel string) mapstructure.DecodeHookFunc {
-	return func(from, to reflect.Value) (interface{}, error) {
+	return func(from, to reflect.Value) (any, error) {
 		if from.Kind() != reflect.Map || from.IsNil() || to.Type() != reflect.TypeOf(zeroConfiguration) {
 			return from.Interface(), nil
 		}
@@ -167,7 +218,7 @@ func RenameKeyUnmarshallerHook[Configuration any](zeroConfiguration Configuratio
 // type. A map from configuration types to a function providing the inner
 // default config should be provided.
 func ParametrizedConfigurationUnmarshallerHook[OuterConfiguration any, InnerConfiguration any](zeroOuterConfiguration OuterConfiguration, innerConfigurationMap map[string](func() InnerConfiguration)) mapstructure.DecodeHookFunc {
-	return func(from, to reflect.Value) (interface{}, error) {
+	return func(from, to reflect.Value) (any, error) {
 		if to.Type() != reflect.TypeOf(zeroOuterConfiguration) {
 			return from.Interface(), nil
 		}
@@ -255,7 +306,7 @@ func ParametrizedConfigurationUnmarshallerHook[OuterConfiguration any, InnerConf
 }
 
 // ParametrizedConfigurationMarshalYAML undoes ParametrizedConfigurationUnmarshallerHook().
-func ParametrizedConfigurationMarshalYAML[OuterConfiguration any, InnerConfiguration any](oc OuterConfiguration, innerConfigurationMap map[string](func() InnerConfiguration)) (interface{}, error) {
+func ParametrizedConfigurationMarshalYAML[OuterConfiguration any, InnerConfiguration any](oc OuterConfiguration, innerConfigurationMap map[string](func() InnerConfiguration)) (any, error) {
 	var innerConfigStruct reflect.Value
 	outerConfigStruct := ElemOrIdentity(reflect.ValueOf(oc))
 	result := gin.H{}

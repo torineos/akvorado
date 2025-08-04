@@ -5,31 +5,13 @@ package clickhouse
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
-
-	"akvorado/common/reporter"
 	"akvorado/common/schema"
 )
-
-type migrationStep struct {
-	// CheckQuery to execute to check if the step is needed.
-	CheckQuery string
-	// Arguments to use for the query
-	Args []interface{}
-	// Function to execute if the query returns no row or returns `0'.
-	Do func() error
-}
-
-type migrationStepFunc func(context.Context, reporter.Logger, clickhouse.Conn) migrationStep
-
-type migrationStepWithDescription struct {
-	Description string
-	Step        migrationStepFunc
-}
 
 // migrateDatabase execute database migration
 func (c *Component) migrateDatabase() error {
@@ -37,7 +19,7 @@ func (c *Component) migrateDatabase() error {
 
 	// Set orchestrator URL
 	if c.config.OrchestratorURL == "" {
-		baseURL, err := c.getHTTPBaseURL("1.1.1.1:80")
+		baseURL, err := c.guessHTTPBaseURL("1.1.1.1")
 		if err != nil {
 			return err
 		}
@@ -45,16 +27,11 @@ func (c *Component) migrateDatabase() error {
 	}
 
 	// Grab some information about the database
-	var threads uint8
 	var version string
-	row := c.d.ClickHouse.QueryRow(ctx, `SELECT getSetting('max_threads'), version()`)
-	if err := row.Scan(&threads, &version); err != nil {
+	row := c.d.ClickHouse.QueryRow(ctx, `SELECT version()`)
+	if err := row.Scan(&version); err != nil {
 		c.r.Err(err).Msg("unable to parse database settings")
 		return fmt.Errorf("unable to parse database settings: %w", err)
-	}
-	if c.config.Kafka.Consumers > int(threads) {
-		c.r.Warn().Msgf("too many consumers requested, capping to %d", threads)
-		c.config.Kafka.Consumers = int(threads)
 	}
 	if err := validateVersion(version); err != nil {
 		return fmt.Errorf("incorrect ClickHouse version: %w", err)
@@ -71,7 +48,7 @@ func (c *Component) migrateDatabase() error {
 			return fmt.Errorf("unable to parse cluster settings: %w", err)
 		}
 		if shardNum == 0 {
-			return fmt.Errorf("cannot get the number of shards for the cluster")
+			return errors.New("cannot get the number of shards for the cluster")
 		}
 		c.shards = int(shardNum)
 	}
@@ -162,12 +139,6 @@ func (c *Component) migrateDatabase() error {
 		c.createExportersConsumerView,
 		c.createRawFlowsTable,
 		c.createRawFlowsConsumerView,
-		c.createRawFlowsErrors,
-		func(ctx context.Context) error {
-			return c.createDistributedTable(ctx, "flows_raw_errors")
-		},
-		c.createRawFlowsErrorsConsumerView,
-		c.deleteOldRawFlowsErrorsView,
 	)
 	if err != nil {
 		return err
@@ -185,11 +156,12 @@ func (c *Component) migrateDatabase() error {
 	return nil
 }
 
-// getHTTPBaseURL tries to guess the appropriate URL to access our
+// guessHTTPBaseURL tries to guess the appropriate URL to access our
 // HTTP daemon. It tries to get our IP address using an unconnected
 // UDP socket.
-func (c *Component) getHTTPBaseURL(address string) (string, error) {
+func (c *Component) guessHTTPBaseURL(ip string) (string, error) {
 	// Get IP address
+	address := net.JoinHostPort(ip, "80")
 	conn, err := net.Dial("udp", address)
 	if err != nil {
 		return "", fmt.Errorf("cannot get our IP address: %w", err)
@@ -197,13 +169,15 @@ func (c *Component) getHTTPBaseURL(address string) (string, error) {
 	defer conn.Close()
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 
-	// Combine with HTTP port
-	_, port, err := net.SplitHostPort(c.d.HTTP.LocalAddr().String())
+	// Get HTTP port
+	_, httpPort, err := net.SplitHostPort(c.d.HTTP.LocalAddr().String())
 	if err != nil {
 		return "", fmt.Errorf("cannot get HTTP port: %w", err)
 	}
+
+	// Build final URL
 	base := fmt.Sprintf("http://%s",
-		net.JoinHostPort(localAddr.IP.String(), port))
+		net.JoinHostPort(localAddr.IP.String(), httpPort))
 	c.r.Debug().Msgf("detected base URL is %s", base)
 	return base, nil
 }

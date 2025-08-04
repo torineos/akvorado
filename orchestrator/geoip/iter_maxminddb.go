@@ -4,25 +4,159 @@
 package geoip
 
 import (
-	"github.com/oschwald/maxminddb-golang"
+	"github.com/oschwald/maxminddb-golang/v2"
+	"github.com/oschwald/maxminddb-golang/v2/mmdbdata"
 )
 
-type maxmindDBASN struct {
-	AutonomousSystemNumber       uint   `maxminddb:"autonomous_system_number"`
-	AutonomousSystemOrganization string `maxminddb:"autonomous_system_organization"`
+// for a list fields available, see: https://github.com/oschwald/geoip2-golang/blob/main/reader.go
+
+// maxmindGeoInfo is an alias for GeoInfo with MaxMind-specific unmarshaling
+type maxmindGeoInfo GeoInfo
+
+// UnmarshalMaxMindDB implements custom unmarshaling for MaxMind geo format
+func (g *maxmindGeoInfo) UnmarshalMaxMindDB(d *mmdbdata.Decoder) error {
+	mapIter, _, err := d.ReadMap()
+	if err != nil {
+		return err
+	}
+
+	for key, err := range mapIter {
+		if err != nil {
+			return err
+		}
+		switch string(key) {
+		case "country":
+			countryIter, _, err := d.ReadMap()
+			if err != nil {
+				return err
+			}
+			for countryKey, err := range countryIter {
+				if err != nil {
+					return err
+				}
+				if string(countryKey) == "iso_code" {
+					isoCode, err := d.ReadString()
+					if err != nil {
+						return err
+					}
+					g.Country = isoCode
+				} else {
+					if err := d.SkipValue(); err != nil {
+						return err
+					}
+				}
+			}
+		case "city":
+			cityIter, _, err := d.ReadMap()
+			if err != nil {
+				return err
+			}
+			for cityKey, err := range cityIter {
+				if err != nil {
+					return err
+				}
+				if string(cityKey) == "names" {
+					namesIter, _, err := d.ReadMap()
+					if err != nil {
+						return err
+					}
+					for nameKey, err := range namesIter {
+						if err != nil {
+							return err
+						}
+						if string(nameKey) == "en" {
+							cityName, err := d.ReadString()
+							if err != nil {
+								return err
+							}
+							g.City = cityName
+						} else {
+							if err := d.SkipValue(); err != nil {
+								return err
+							}
+						}
+					}
+				} else {
+					if err := d.SkipValue(); err != nil {
+						return err
+					}
+				}
+			}
+		case "subdivisions":
+			subdivisionsIter, _, err := d.ReadSlice()
+			if err != nil {
+				return err
+			}
+			skipRemaining := false
+			for err := range subdivisionsIter {
+				if err != nil {
+					return err
+				}
+				if !skipRemaining {
+					subdivisionIter, _, err := d.ReadMap()
+					if err != nil {
+						return err
+					}
+					for subdivisionKey, err := range subdivisionIter {
+						if err != nil {
+							return err
+						}
+						if string(subdivisionKey) == "iso_code" {
+							isoCode, err := d.ReadString()
+							if err != nil {
+								return err
+							}
+							g.State = isoCode
+						} else {
+							if err := d.SkipValue(); err != nil {
+								return err
+							}
+						}
+					}
+					skipRemaining = true
+				} else {
+					if err := d.SkipValue(); err != nil {
+						return err
+					}
+				}
+			}
+		default:
+			if err := d.SkipValue(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
-// for a list fields available, see: https://github.com/oschwald/geoip2-golang/blob/main/reader.go
-type maxmindDBCountry struct {
-	Country struct {
-		IsoCode string `maxminddb:"iso_code"`
-	} `maxminddb:"country"`
-	City struct {
-		Names map[string]string `maxminddb:"names"`
-	} `maxminddb:"city"`
-	Subdivisions []struct {
-		IsoCode string `maxminddb:"iso_code"`
-	} `maxminddb:"subdivisions"`
+// maxmindASNInfo is an alias for ASNInfo with MaxMind-specific unmarshaling
+type maxmindASNInfo ASNInfo
+
+// UnmarshalMaxMindDB implements custom unmarshaling for MaxMind ASN format
+func (a *maxmindASNInfo) UnmarshalMaxMindDB(d *mmdbdata.Decoder) error {
+	mapIter, _, err := d.ReadMap()
+	if err != nil {
+		return err
+	}
+
+	for key, err := range mapIter {
+		if err != nil {
+			return err
+		}
+		switch string(key) {
+		case "autonomous_system_number":
+			asn, err := d.ReadUint32()
+			if err != nil {
+				return err
+			}
+			a.ASNumber = asn
+		default:
+			if err := d.SkipValue(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 type maxmindDB struct {
@@ -30,20 +164,16 @@ type maxmindDB struct {
 }
 
 func (mmdb *maxmindDB) IterASNDatabase(f AsnIterFunc) error {
-	it := mmdb.db.Networks()
-	maxminddb.SkipAliasedNetworks(it)
+	for result := range mmdb.db.Networks() {
+		var asnInfo maxmindASNInfo
 
-	for it.Next() {
-		asnInfo := &maxmindDBASN{}
-		subnet, err := it.Network(asnInfo)
-
-		if err != nil {
-			return err
+		err := result.Decode(&asnInfo)
+		if err != nil || asnInfo.ASNumber == 0 {
+			continue
 		}
-		if err := f(subnet, ASNInfo{
-			ASNumber: uint32(asnInfo.AutonomousSystemNumber),
-			ASName:   asnInfo.AutonomousSystemOrganization,
-		}); err != nil {
+
+		prefix := result.Prefix()
+		if err := f(prefix, ASNInfo(asnInfo)); err != nil {
 			return err
 		}
 	}
@@ -51,26 +181,16 @@ func (mmdb *maxmindDB) IterASNDatabase(f AsnIterFunc) error {
 }
 
 func (mmdb *maxmindDB) IterGeoDatabase(f GeoIterFunc) error {
-	it := mmdb.db.Networks()
-	maxminddb.SkipAliasedNetworks(it)
+	for result := range mmdb.db.Networks() {
+		var geoInfo maxmindGeoInfo
 
-	for it.Next() {
-		geoInfo := &maxmindDBCountry{}
-		subnet, err := it.Network(geoInfo)
-
-		if err != nil {
-			return err
-		}
-		var state string
-		if len(geoInfo.Subdivisions) > 0 {
-			state = geoInfo.Subdivisions[0].IsoCode
+		err := result.Decode(&geoInfo)
+		if err != nil || geoInfo.Country == "" {
+			continue
 		}
 
-		if err := f(subnet, GeoInfo{
-			Country: geoInfo.Country.IsoCode,
-			State:   state,
-			City:    geoInfo.City.Names["en"],
-		}); err != nil {
+		prefix := result.Prefix()
+		if err := f(prefix, GeoInfo(geoInfo)); err != nil {
 			return err
 		}
 	}
