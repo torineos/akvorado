@@ -2,7 +2,7 @@
 
 New features should be discussed. Open an issue before trying anything major.
 New features are not free to maintain and put a burden on the maintainers of the
-project, notably when it comes to fix bugs and when they interfer in future
+project, notably when it comes to fixing bugs and when they interfere with future
 evolutions.
 
 # User friendliness
@@ -19,7 +19,7 @@ users:
 
 Go formatter takes care of most issues. For the remaining points:
 
-- comments are sentence and should be capitalized
+- comments are sentences and should be capitalized
 - on the other hand, log messages are not and should *not* be capitalized
 - metrics should be named using [Prometheus conventions][]
 
@@ -40,19 +40,27 @@ with `make test-go PKG=akvorado/orchestrator/clickhouse`. Using just `go test`
 would work, but `make test-go` also runs linting and formatting automatically.
 
 If possible, tests should not rely on external components, but when it becomes
-hard to do so, it is possible to spawns services through Docker. Locally, one
-can spawns them through `docker compose -f docker/docker-compose-dev.yml`.
-GitHub actions are using services to spawn them.
+hard to do so, it is possible to spawn services through Docker. Locally, one
+can spawn them through `docker compose -f docker/docker-compose-dev.yml`:
+
+- `... up clickhouse` to spawn a single ClickHouse
+- `... up clickhouse-\*` to spawn a ClickHouse cluster
+- `... up kafka` to spawn a Kafka broker
 
 For manual end-to-end tests, you can use `make docker-dev` to build a Docker
 container of Akvorado, then use `docker compose up` to run Docker compose.
-Beware to not destroy the volume for GeoIP at each tentative as there is a
+Beware not to destroy the volume for GeoIP at each attempt as there is a
 per-day limit on the number of times one IP can fetch the GeoIP database.
 
 If you need to work on the frontend part, you can spawn the Docker compose
 setup, then in `console/frontend`, use `npm run dev` and point your browser to
 `http://localhost:5173` instead of `http://localhost:8080`. Any change of
-frontend-related files should be applied immediately.
+frontend-related files should be applied immediately. You still need to run a
+local version of the console service:
+
+```console
+$ make && AKVORADO_CFG_CONSOLE_SERVELIVEFS=true ./bin/akvorado console /dev/null
+```
 
 # Licensing
 

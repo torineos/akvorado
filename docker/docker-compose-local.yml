@@ -6,3 +6,45 @@
 #   akvorado-orchestrator:
 #     volumes:
 #       - /usr/share/GeoIP:/usr/share/GeoIP:ro
+
+# If you want to expose the service directly on port 80, uncomment this block.
+
+# services:
+#   traefik:
+#     ports:
+#       - 80:8081/tcp
+
+# To add use HTTP basic auth to protect the service, uncomment the snippet
+# below. You can generate your own user/password with "htpasswd -nB akvorado".
+# If you enable TLS, replace "public" by "publicsecure".
+
+# services:
+#   traefik:
+#     environment:
+#       TRAEFIK_ENTRYPOINTS_public_HTTP_MIDDLEWARES: auth@docker
+#     labels:
+#       - traefik.http.middlewares.auth.basicauth.users=akvorado:$$2y$$05$$Ud.JjfZWtKlSOoXKkv48leXze3u4cSNC5G4lG9nkfv5OFOkVcgRrm
+
+# If you don't want to expose Kafka-UI and Traefik on the public endpoints, uncomment this block.
+
+# services:
+#   kafka-ui:
+#     labels:
+#       - traefik.http.routers.kafka-ui.entrypoints=private
+#   traefik:
+#     labels:
+#       - traefik.http.routers.traefik.entrypoints=private
+
+# To enable IPv6 routing, uncomment the following block. This requires Docker
+# Engine v27.
+
+# networks:
+#   default:
+#     driver: bridge
+#     driver_opts:
+#       com.docker.network.bridge.gateway_mode_ipv6: routed
+#     ipam:
+#       driver: default
+#       config:
+#         - subnet: 2001:db8::/64
+#           gateway: 2001:db8::1

@@ -1,4 +1,15 @@
 ---
+networks:
+  default:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 247.16.14.0/24
+        - subnet: fd1c:8ce3:6fb:1::/64
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-akvorado
+
 volumes:
   akvorado-kafka:
   akvorado-geoip:
@@ -33,7 +44,7 @@ services:
 
     restart: unless-stopped
     volumes:
-      - akvorado-kafka:/var/lib/kafka
+      - akvorado-kafka:/var/lib/kafka/data
     healthcheck:
       interval: 20s
       test: ["CMD",
@@ -47,13 +58,12 @@ services:
     depends_on:
       - kafka
     environment:
-      - KAFKA_CLUSTERS_0_NAME=local
-      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
-      - KAFKA_CLUSTERS_0_READONLY=true
-      - SERVER_SERVLET_CONTEXT_PATH=/kafka-ui
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_READONLY: true
+      SERVER_SERVLET_CONTEXT_PATH: /kafka-ui
     labels:
       - traefik.enable=true
-      - traefik.http.routers.kafka-ui.entrypoints=private
       - traefik.http.routers.kafka-ui.rule=PathPrefix(`/kafka-ui`)
 
   redis:
@@ -105,7 +115,7 @@ services:
     volumes:
       - akvorado-console-db:/run/akvorado
     environment:
-      - AKVORADO_CFG_CONSOLE_DATABASE_DSN=/run/akvorado/console.sqlite
+      AKVORADO_CFG_CONSOLE_DATABASE_DSN: /run/akvorado/console.sqlite
     labels:
       - traefik.enable=true
       # Only expose /debug endpoint on the private entrypoint.
@@ -168,7 +178,7 @@ services:
     volumes:
       - akvorado-run:/run/akvorado
     environment:
-      - AKVORADO_CFG_OUTLET_METADATA_CACHEPERSISTFILE=/run/akvorado/metadata.cache
+      AKVORADO_CFG_OUTLET_METADATA_CACHEPERSISTFILE: /run/akvorado/metadata.cache
     labels:
       - traefik.enable=true
       # Disable access logging of /api/v0/outlet/metrics
@@ -201,11 +211,12 @@ services:
       - akvorado-clickhouse:/var/lib/clickhouse
       - ./clickhouse/akvorado.xml:/etc/clickhouse-server/config.d/akvorado.xml
     environment:
-      - CLICKHOUSE_INIT_TIMEOUT=60
-      - CLICKHOUSE_SKIP_USER_SETUP=1
+      CLICKHOUSE_INIT_TIMEOUT: 60
+      CLICKHOUSE_SKIP_USER_SETUP: 1
     cap_add:
       - SYS_NICE
     restart: unless-stopped
+    stop_grace_period: 30s
     healthcheck:
       interval: 20s
       test: ["CMD", "wget", "-T", "1", "--spider", "--no-proxy", "http://127.0.0.1:8123/ping"]
@@ -222,19 +233,31 @@ services:
       file: versions.yml
       service: traefik
     restart: unless-stopped
-    command:
-      - --api=true
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.private.address=:8080
-      - --entrypoints.public.address=:8081
-      - --accesslog=true
+    environment:
+      TRAEFIK_API: "true"
+      TRAEFIK_API_BASEPATH: "/traefik"
+      TRAEFIK_METRICS_PROMETHEUS: "true"
+      TRAEFIK_METRICS_PROMETHEUS_MANUALROUTING: "true"
+      TRAEFIK_METRICS_PROMETHEUS_ADDROUTERSLABELS: "true"
+      TRAEFIK_PROVIDERS_DOCKER: "true"
+      TRAEFIK_PROVIDERS_DOCKER_EXPOSEDBYDEFAULT: "false"
+      TRAEFIK_ENTRYPOINTS_private_ADDRESS: ":8080" # all services
+      TRAEFIK_ENTRYPOINTS_public_ADDRESS: ":8081"  # public services only
+      TRAEFIK_ACCESSLOG: "true"
+    labels:
+      - traefik.enable=true
+      - "traefik.http.routers.traefik.rule=PathPrefix(`/traefik`) && !PathPrefix(`/traefik/debug`)"
+      - traefik.http.routers.traefik.service=api@internal
+      - traefik.http.routers.traefik-metrics.rule=PathPrefix(`/traefik/metrics`)
+      - traefik.http.routers.traefik-metrics.priority=200
+      - traefik.http.routers.traefik-metrics.service=prometheus@internal
+    expose:
+      - 8080/tcp
     ports:
       # Port 8080 is considered private as it exposes sensible unauthenticated
       # services (ClickHouse, configuration, ...). Therefore, it is only exposed
-      # on the loopback. Port 8081 is the one you can expose to users. If you
-      # want to change these ports, leave "8080/tcp" and "8081/tcp" unchanged:
-      # you can modify the IP/port on the left.
+      # on the loopback. Port 8081 is the one you can expose to users. Check
+      # docker-compose-local.yml if you want to expose directly on port 80.
       - 127.0.0.1:8080:8080/tcp
       - 8081:8081/tcp
     volumes:

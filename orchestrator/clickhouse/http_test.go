@@ -6,7 +6,6 @@ package clickhouse
 import (
 	"testing"
 
-	"akvorado/common/clickhousedb"
 	"akvorado/common/daemon"
 	"akvorado/common/helpers"
 	"akvorado/common/httpserver"
@@ -17,7 +16,6 @@ import (
 
 func TestHTTPEndpoints(t *testing.T) {
 	r := reporter.NewMock(t)
-	clickhouseComponent := clickhousedb.SetupClickHouse(t, r, false)
 	config := DefaultConfiguration()
 	config.SkipMigrations = true
 	config.Networks = helpers.MustNewSubnetMap(map[string]NetworkAttributes{
@@ -43,7 +41,7 @@ func TestHTTPEndpoints(t *testing.T) {
 		HTTP:       httpserver.NewMock(t, r),
 		Schema:     sch,
 		GeoIP:      geoip.NewMock(t, r, false),
-		ClickHouse: clickhouseComponent,
+		ClickHouse: nil,
 	})
 	if err != nil {
 		t.Fatalf("New() error:\n%+v", err)
@@ -71,7 +69,7 @@ func TestHTTPEndpoints(t *testing.T) {
 			ContentType: "text/csv; charset=utf-8",
 			FirstLines: []string{
 				`network,name,role,site,region,country,state,city,tenant,asn`,
-				`192.0.2.0/24,infra,,,,,,,,`,
+				`::ffff:192.0.2.0/120,infra,,,,,,,,`,
 			},
 		}, {
 			URL:         "/api/v0/orchestrator/clickhouse/custom_dict_none.csv",
@@ -95,7 +93,6 @@ func TestHTTPEndpoints(t *testing.T) {
 
 func TestAdditionalASNs(t *testing.T) {
 	r := reporter.NewMock(t)
-	clickhouseComponent := clickhousedb.SetupClickHouse(t, r, false)
 	config := DefaultConfiguration()
 	config.ASNs = map[uint32]string{
 		1: "New network",
@@ -105,7 +102,7 @@ func TestAdditionalASNs(t *testing.T) {
 		HTTP:       httpserver.NewMock(t, r),
 		Schema:     schema.NewMock(t),
 		GeoIP:      geoip.NewMock(t, r, false),
-		ClickHouse: clickhouseComponent,
+		ClickHouse: nil,
 	})
 	if err != nil {
 		t.Fatalf("New() error:\n%+v", err)

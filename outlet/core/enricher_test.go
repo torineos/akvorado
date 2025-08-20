@@ -63,7 +63,8 @@ func TestEnrich(t *testing.T) {
 					schema.ColumnOutIfSpeed:       1000,
 				},
 			},
-		}, {
+		},
+		{
 			Name: "no rule, override sampling rate",
 			Configuration: gin.H{"overridesamplingrate": gin.H{
 				"192.0.2.0/24":   100,
@@ -93,7 +94,8 @@ func TestEnrich(t *testing.T) {
 					schema.ColumnOutIfSpeed:       1000,
 				},
 			},
-		}, {
+		},
+		{
 			Name:          "no rule, no sampling rate, default is one value",
 			Configuration: gin.H{"defaultsamplingrate": 500},
 			InputFlow: func() *schema.FlowMessage {
@@ -118,7 +120,8 @@ func TestEnrich(t *testing.T) {
 					schema.ColumnOutIfSpeed:       1000,
 				},
 			},
-		}, {
+		},
+		{
 			Name: "no rule, no sampling rate, default is map",
 			Configuration: gin.H{"defaultsamplingrate": gin.H{
 				"192.0.2.0/24":   100,
@@ -147,7 +150,8 @@ func TestEnrich(t *testing.T) {
 					schema.ColumnOutIfSpeed:       1000,
 				},
 			},
-		}, {
+		},
+		{
 			Name: "exporter rule",
 			Configuration: gin.H{
 				"exporterclassifiers": []string{
@@ -182,7 +186,8 @@ func TestEnrich(t *testing.T) {
 					schema.ColumnOutIfSpeed:       1000,
 				},
 			},
-		}, {
+		},
+		{
 			Name: "exporter rule with an error",
 			Configuration: gin.H{
 				"exporterclassifiers": []string{
@@ -214,7 +219,8 @@ func TestEnrich(t *testing.T) {
 					schema.ColumnOutIfSpeed:       1000,
 				},
 			},
-		}, {
+		},
+		{
 			Name: "exporter rule with reject",
 			Configuration: gin.H{
 				"exporterclassifiers": []string{
@@ -230,7 +236,8 @@ func TestEnrich(t *testing.T) {
 				}
 			},
 			OutputFlow: nil,
-		}, {
+		},
+		{
 			Name: "interface rule with reject",
 			Configuration: gin.H{
 				"interfaceclassifiers": []string{
@@ -246,7 +253,8 @@ func TestEnrich(t *testing.T) {
 				}
 			},
 			OutputFlow: nil,
-		}, {
+		},
+		{
 			Name: "interface rule with index",
 			Configuration: gin.H{
 				"interfaceclassifiers": []string{
@@ -279,7 +287,8 @@ func TestEnrich(t *testing.T) {
 					schema.ColumnOutIfSpeed:       1000,
 				},
 			},
-		}, {
+		},
+		{
 			Name: "interface rule with rename",
 			Configuration: gin.H{
 				"interfaceclassifiers": []string{
@@ -310,7 +319,8 @@ func TestEnrich(t *testing.T) {
 					schema.ColumnOutIfSpeed:       1000,
 				},
 			},
-		}, {
+		},
+		{
 			Name: "interface rule with VLAN",
 			Configuration: gin.H{
 				"interfaceclassifiers": []string{
@@ -344,7 +354,8 @@ func TestEnrich(t *testing.T) {
 					schema.ColumnOutIfSpeed:       1000,
 				},
 			},
-		}, {
+		},
+		{
 			Name: "interface rule",
 			Configuration: gin.H{
 				"interfaceclassifiers": []string{
@@ -381,7 +392,8 @@ ClassifyProviderRegex(Interface.Description, "^Transit: ([^ ]+)", "$1")`,
 					schema.ColumnOutIfBoundary:    schema.InterfaceBoundaryInternal,
 				},
 			},
-		}, {
+		},
+		{
 			Name: "configure twice boundary",
 			Configuration: gin.H{
 				"interfaceclassifiers": []string{
@@ -414,7 +426,8 @@ ClassifyProviderRegex(Interface.Description, "^Transit: ([^ ]+)", "$1")`,
 					schema.ColumnOutIfBoundary:    2,
 				},
 			},
-		}, {
+		},
+		{
 			Name: "configure twice provider",
 			Configuration: gin.H{
 				"interfaceclassifiers": []string{
@@ -447,7 +460,8 @@ ClassifyProviderRegex(Interface.Description, "^Transit: ([^ ]+)", "$1")`,
 					schema.ColumnOutIfProvider:    "telia",
 				},
 			},
-		}, {
+		},
+		{
 			Name: "classify depending on description",
 			Configuration: gin.H{
 				"interfaceclassifiers": []string{

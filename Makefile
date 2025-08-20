@@ -2,14 +2,13 @@ export CGO_ENABLED=0
 export GOTOOLCHAIN=local
 
 MODULE   = $(shell $(GO) list -m)
-DATE    ?= $(shell date +%FT%T%z)
 VERSION ?= $(shell git describe --tags --always --dirty --match=v* 2> /dev/null || \
 			cat .version 2> /dev/null || echo v0)
 PKGS     = $(or $(PKG),$(shell env GO111MODULE=on $(GO) list ./...))
 
 GO      = go
 NPM     = npm
-TIMEOUT = 45
+TIMEOUT = 45s
 LSFILES = git ls-files -cmo --exclude-standard --
 V = 0
 Q = $(if $(filter 1,$V),,@)
@@ -41,8 +40,8 @@ GENERATED = \
 	$(GENERATED_JS) \
 	console/data/frontend
 
-.PHONY: all all_indep
-all: fmt lint all_indep ; $(info $(M) building executable…) @ ## Build program binary
+.PHONY: all all-indep
+all: fmt lint all-indep ; $(info $(M) building executable…) @ ## Build program binary
 	$Q env GOOS=$(TARGETOS) GOARCH=$(TARGETARCH) \
          $(if $(filter amd64,$(TARGETARCH)),GOAMD64=$(TARGETVARIANT),\
          $(if $(filter arm64,$(TARGETARCH)),GOARM64=$(TARGETVARIANT:%=%.0),\
@@ -50,14 +49,13 @@ all: fmt lint all_indep ; $(info $(M) building executable…) @ ## Build program
 	   $(GO) build \
 		-tags release \
 		-ldflags '-X $(MODULE)/common/helpers.AkvoradoVersion=$(VERSION)' \
-		-o bin/$(basename $(MODULE)) main.go
-all_indep: $(GENERATED)
+		$(BUILDARGS) \
+		-o bin/$(basename $(MODULE)) .
+all-indep: $(GENERATED)
 
 # Tools
 
 ENUMER = go tool enumer
-GOCOV = go tool gocov
-GOCOVXML = go tool gocov-xml
 GOIMPORTS = go tool goimports
 GOTESTSUM = go tool gotestsum
 MOCKGEN = go tool mockgen
@@ -142,7 +140,7 @@ changelog.md: docs/99-changelog.md # To be used by GitHub actions only.
 	$Q >  $@ < docs/99-changelog.md \
 		sed -n '/^## '$${GITHUB_REF##*/v}' -/,/^## /{//!p}'
 	$Q >> $@ echo "**Docker image**: \`docker pull ghcr.io/$${GITHUB_REPOSITORY}:$${GITHUB_REF##*/v}\`"
-	$Q >> $@ echo "**Full changelog**: https://github.com/$${GITHUB_REPOSITORY}/compare/v$$(< docs/99-changelog.md sed -n '/^## '$${GITHUB_REF##*/v}' -/,/^## /{s/^## \([0-9.]*\) -.*/\1/p}' | tail -1)...v$${GITHUB_REF##*/v}"
+	$Q >> $@ echo "**Full changelog**: https://github.com/$${GITHUB_REPOSITORY}/compare/v$$(< docs/99-changelog.md sed -n '/^## '$${GITHUB_REF##*/v}' -/,/^## /{s/^## \([0-9.a-z-]*\) -.*/\1/p}' | tail -1)...v$${GITHUB_REF##*/v}"
 
 # Update default.pgo with the locally running "docker compose" instance.
 # Use: "make -j default.pgo".
@@ -170,7 +168,7 @@ test-go-units: ; $(info $(M) running Go tests$(GOTEST_MORE)…)
 	$Q mkdir -p test/go
 	$Q env PATH=$(dir $(abspath $(shell command -v $(GO)))):$(PATH) $(GOTESTSUM) \
         --junitfile test/go/tests.xml -- \
-		-timeout $(TIMEOUT)s \
+		-timeout $(TIMEOUT) \
 		$(GOTEST_ARGS) $(PKGS)
 test-race: CGO_ENABLED=1
 test-race: GOTEST_ARGS=-race
@@ -181,8 +179,8 @@ test-short: GOTEST_MORE=, only short tests
 test-short: test-go  ## Run only short Go tests
 test-bench: ; $(info $(M) running benchmarks…) @ ## Run Go benchmarks
 	$Q $(GO) test \
-		-fullpath -timeout $(TIMEOUT)s -run=__absolutelynothing__ -bench=. -benchmem \
-		$(PKGS) # -memprofile test/go/memprofile.out -cpuprofile test/go/cpuprofile.out
+		-fullpath -run=__absolutelynothing__ -bench=. \
+		$(PKGS) # -benchmem -memprofile test/go/memprofile.out -cpuprofile test/go/cpuprofile.out
 test-coverage-go: ; $(info $(M) running Go coverage tests…) @ ## Run Go coverage tests
 	$Q mkdir -p test/go
 	$Q env PATH=$(dir $(abspath $(shell command -v $(GO)))):$(PATH) $(GOTESTSUM) -- \
@@ -198,10 +196,8 @@ test-coverage-go: ; $(info $(M) running Go coverage tests…) @ ## Run Go covera
 	   else cp test/go/profile.out.tmp test/go/profile.out ; \
 	   fi
 	$Q $(GO) tool cover -html=test/go/profile.out -o test/go/coverage.html
-	$Q $(GOCOV) convert test/go/profile.out | $(GOCOVXML) > test/go/coverage.xml
 	@printf "Code coverage: "; \
-		c=$$(echo "scale=1;$$(sed -En 's/^<coverage line-rate="([0-9.]+)".*/\1/p' test/go/coverage.xml) * 100 / 1" | bc -q) ; \
-	    echo $$c ; [ $$c != 0 ]
+		go tool cover -func test/go/profile.out | awk '($$1 == "total:") { print $$NF}'
 
 test-js: .fmt-js~ .lint-js~ $(GENERATED_JS)
 test-js: ; $(info $(M) running JS tests…) @ ## Run JS tests
@@ -255,10 +251,19 @@ version:
 	@echo $(VERSION)
 
 .PHONY: docker docker-dev
+DOCKER_BUILD_OPTIONS =
 docker: ; $(info $(M) build Docker image…) @ ## Build Docker image
-	$Q docker build -f docker/Dockerfile --build-arg VERSION=$(VERSION) -t ghcr.io/akvorado/akvorado:main .
+	$Q docker build -f docker/Dockerfile $(DOCKER_BUILD_OPTIONS) \
+		--build-arg VERSION=$(VERSION) -t ghcr.io/akvorado/akvorado:main .
 docker-dev: all ; $(info $(M) build development Docker image…) @ ## Build development Docker image
-	$Q docker build -f docker/Dockerfile.dev --build-arg VERSION=$(VERSION) -t ghcr.io/akvorado/akvorado:main .
+	$Q docker build -f docker/Dockerfile.dev $(DOCKER_BUILD_OPTIONS) \
+		--build-arg VERSION=$(VERSION) -t ghcr.io/akvorado/akvorado:main .
+
+.PHONY: all-coverage docker-dev-coverage
+all-coverage: BUILDARGS=-cover -covermode=atomic
+all-coverage: all
+docker-dev-coverage: BUILDARGS=-cover -covermode=atomic
+docker-dev-coverage: docker-dev
 
 # This requires "skopeo". I fetch it from nix.
 .PHONY: docker-upgrade-versions

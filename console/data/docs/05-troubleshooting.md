@@ -36,10 +36,9 @@ You can recover space with `docker system prune` or get more details with
 ClickHouse.
 
 > [!CAUTION]
-> To recover even more space, you can use `docker system prune -a`. It is
-> important to understand that this command removes anything not currently used.
-> Only use it if all the containers are up and running and you don't use Docker
-> for something else.
+> Do **not** use `docker system prune -a` unless you are pretty sure that all your
+> containers are up and running. It is important to understand that this command
+> removes anything not currently used.
 
 Check that all components are running and healthy:
 
@@ -241,11 +240,10 @@ Here is a list of errors you may find:
   and output interface indexes. Fix this on the exporter.
 
 To check the SNMP configuration is correct, a convenient way is to use
-`tcpdump`. Notably, you can check the credentials are correct. If you don't get
-a `GetResponse` message, likely there is a misconfiguration on the exporter.
+`tcpdump`.
 
 ```console
-# tcpdump -c3 -pni any port 161
+# nsenter -t $(pgrep -fo "akvorado inlet") -n tcpdump -c3 -pni eth0 port 161
 20:46:44.812243 IP 240.0.2.11.34554 > 240.0.2.13.161: C="private" GetRequest(95) .1.3.6.1.2.1.1.5.0 .1.3.6.1.2.1.2.2.1.2.11 .1.3.6.1.2.1.31.1.1.1.1.11 .1.3.6.1.2.1.31.1.1.1.18.11 .1.3.6.1.2.1.31.1.1.1.15.11
 20:46:45.144567 IP 240.0.2.13.161 > 240.0.2.11.34554: C="private" GetResponse(153) .1.3.6.1.2.1.1.5.0="dc3-edge1.example.com" .1.3.6.1.2.1.2.2.1.2.11="Gi0/0/0/11" .1.3.6.1.2.1.31.1.1.1.1.11="Gi0/0/0/11" .1.3.6.1.2.1.31.1.1.1.18.11="Transit: Lumen" .1.3.6.1.2.1.31.1.1.1.15.11=10000
 ^C
@@ -254,31 +252,29 @@ a `GetResponse` message, likely there is a misconfiguration on the exporter.
 0 packets dropped by kernel
 ```
 
-Another cause for metadata cache misses is that Docker cannot reach the
-exporters because Docker subnets may overlap with your router networks. To fix
-this, add this to `/etc/docker/daemon.json` and restart Docker:
+If you don't get an answer, there may be several causes:
 
-```json
-{
- "default-address-pools": [{"base":"240.0.0.0/16","size":24}],
- "userland-proxy": false
-}
-```
+- the community is incorrect and you need to fix it
+- the exporter is not configured to answer to SNMP requests
 
 Finally, check if flows are sent to ClickHouse successfully. Use this command:
 
 ```
-$ curl -s http://127.0.0.1:8080/api/v0/outlet/metrics | grep -P 'akvorado_outlet_clickhouse_(batches|flows|errors)'
-​# HELP akvorado_outlet_clickhouse_batches_total Number of batches of flows sent to ClickHouse
-​# TYPE akvorado_outlet_clickhouse_batches_total counter
-akvorado_outlet_clickhouse_batches_total 3412
-​# HELP akvorado_outlet_clickhouse_flows_total Number of flows sent to ClickHouse
-​# TYPE akvorado_outlet_clickhouse_flows_total counter
-akvorado_outlet_clickhouse_flows_total 161852
+$ curl -s http://127.0.0.1:8080/api/v0/outlet/metrics | grep -P 'akvorado_outlet_clickhouse_(errors|flow)'
+# HELP akvorado_outlet_clickhouse_errors_total Errors while inserting into ClickHouse
+# TYPE akvorado_outlet_clickhouse_errors_total counter
+akvorado_outlet_clickhouse_errors_total{error="send"} 7
+​# HELP akvorado_outlet_clickhouse_flow_per_batch Number of flow per batch sent to ClickHouse
+​# TYPE akvorado_outlet_clickhouse_flow_per_batch summary
+akvorado_outlet_clickhouse_flow_per_batch{quantile="0.5"} 250
+akvorado_outlet_clickhouse_flow_per_batch{quantile="0.9"} 480
+akvorado_outlet_clickhouse_flow_per_batch{quantile="0.99"} 950
+akvorado_outlet_clickhouse_flow_per_batch_sum 45892
+akvorado_outlet_clickhouse_flow_per_batch_count 163
 ```
 
-If the numbers are increasing, everything works correctly. Otherwise, you likely
-have an error counter that shows the reason.
+If the errors are not increasing and the `flow_per_batch_sum` is increasing,
+everything works correctly.
 
 ### ClickHouse
 
@@ -407,7 +403,7 @@ increased to 1 million per monitor-map.
 #### Other routers
 
 Other routers are likely to share the same limitations. It should be noted that
-sFlow and IPFIX 3215 do not have a flow cache and therefore are less likely to
+sFlow and IPFIX 315 do not have a flow cache and therefore are less likely to
 have scaling problems.
 
 ### Inlet
@@ -423,7 +419,7 @@ compared to `akvorado_inlet_flow_input_udp_packets_total`. Another way to get
 the same information is by using `ss -lunepm` and look at the drop counter:
 
 ```console
-$ nsenter -t $(pidof akvorado) -n ss -lunepm
+$ nsenter -t $(pgrep -fo "akvorado inlet") -n ss -lunepm
 State            Recv-Q           Send-Q                       Local Address:Port                        Peer Address:Port           Process
 UNCONN           0                0                                        *:2055                                   *:*               users:(("akvorado",pid=2710961,fd=16)) ino:67643151 sk:89c v6only:0 <->
          skmem:(r0,rb212992,t0,tb212992,f4096,w0,o0,bl0,d486525)
@@ -432,17 +428,75 @@ UNCONN           0                0                                        *:205
 In the example above, there were 486525 drops. This can be solved in three ways:
 
 - increase the number of workers for the UDP input,
-- increase the value of `net.core.rmem_max` sysctl and increase the
-  `receive-buffer` setting attached to the input,
+- increase the value of `net.core.rmem_max` sysctl (on the host) and increase
+  the `receive-buffer` setting attached to the input to the same value,
 - add more inlet instances and shard the exporters among the configured ones.
+
+The value of the receive buffer is also available as a metric:
+
+```console
+$ curl -s http://127.0.0.1:8080/api/v0/inlet/metrics | grep -P 'akvorado_inlet_flow_input_udp_buffer'
+​# HELP akvorado_inlet_flow_input_udp_buffer_size_bytes Size of the in-kernel buffer for this worker.
+​# TYPE akvorado_inlet_flow_input_udp_buffer_size_bytes gauge
+akvorado_inlet_flow_input_udp_buffer_size_bytes{listener=":2055",worker="2"} 212992
+```
 
 ### Outlet
 
-When the outlet has scaling issues, the data is delivered late at ClickHouse.
-There are two ways to fix that:
+The outlet is expects to automatically scale the number of workers to ensure the
+data is delivered efficiently to ClickHouse. Increasing the maximum number of
+Kafka workers (`max-workers`) past the default value of 8 may put more pressure
+on ClickHouse. You can however increase `maximum-batch-size`.
 
-- increase the number of Kafka workers,
-- add more outlet instances.
+The BMP routing component may have some challenge to scale, notably when peers
+disappear as it requires to cleanup a lot of entries in the routing tables. BMP
+is a one-way protocol and the sender may declare the receiver station “stuck” if
+it does not accept more data. To avoid this situation, you may need to tune the
+TCP receive buffer. First, check the current situation:
+
+```console
+$ nsenter -t $(pgrep -fo "akvorado outlet") -n ss -tnepm sport = :10179
+State         Recv-Q          Send-Q                         Local Address:Port                           Peer Address:Port          Process
+ESTAB         0               0                        [::ffff:240.0.2.10]:10179                   [::ffff:240.0.2.15]:46656          users:(("akvorado",pid=1117049,fd=13)) timer:(keepalive,55sec,0) ino:40752297 sk:11 <->
+         skmem:(r0,rb131072,t0,tb87040,f0,w0,o0,bl0,d2976)
+ESTAB         0               0                        [::ffff:240.0.2.10]:10179                   [::ffff:240.0.2.14]:44318          users:(("akvorado",pid=1117049,fd=12)) timer:(keepalive,55sec,0) ino:40751196 sk:12 <->
+         skmem:(r0,rb131072,t0,tb87040,f0,w0,o0,bl0,d2976)
+ESTAB         0               0                        [::ffff:240.0.2.10]:10179                   [::ffff:240.0.2.13]:47586          users:(("akvorado",pid=1117049,fd=11)) timer:(keepalive,55sec,0) ino:40751097 sk:13 <->
+         skmem:(r0,rb131072,t0,tb87040,f0,w0,o0,bl0,d2976)
+ESTAB         0               0                        [::ffff:240.0.2.10]:10179                   [::ffff:240.0.2.12]:51352          users:(("akvorado",pid=1117049,fd=14)) timer:(keepalive,55sec,0) ino:40752299 sk:14 <->
+         skmem:(r0,rb131072,t0,tb87040,f0,w0,o0,bl0,d2976)
+```
+
+Here, the receive buffer for each process is 131 072 bytes. Linux exposes
+`net.ipv4.tcp_rmem` to tune this value:
+
+```console
+$ sysctl net.ipv4.tcp_rmem
+net.ipv4.tcp_rmem = 4096        131072  6291456
+```
+
+The middle value is the default one and the last value is the maximum one. When,
+`net.ipv4.tcp_moderate_rcvbuf` is set to 1 (the default), Linux auto tunes the
+size of the buffer for the application, to maximize the throughtoutput depending
+on the latency. This mechanism won't help there. To increase receive buffer
+size, you need to:
+
+- set the `receive-buffer` value in the BMP provider configuration (for example to 33554432 for 32 MiB)
+- increase the last value of `net.ipv4.tcp_rmem` to the same value
+- increase the value of `net.core.rmem_max` to the same value
+- optionally, increase the last value of `net.ipv4.tcp_mem` by the value of `tcp_rmem[2]`
+  multiplied by the maximum number of BMP peers you expect divided by 4096 bytes
+  per page (check with `getconf PAGESIZE`)
+
+The value of the receive buffer is also available as a metric:
+
+```console
+$ curl -s http://127.0.0.1:8080/api/v0/inlet/metrics | grep -P 'akvorado_outlet_routing_provider_bmp_buffer'
+​# HELP akvorado_outlet_flow_input_udp_buffer_size_bytes Size of the in-kernel buffer for this connection.
+​# TYPE akvorado_outlet_flow_input_udp_buffer_size_bytes gauge
+akvorado_outlet_flow_input_udp_buffer_size_bytes{exporter="241.107.1.12"} 425984
+```
+
 
 ### Profiling
 

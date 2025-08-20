@@ -5,6 +5,7 @@
 package netflow
 
 import (
+	"bytes"
 	"encoding/binary"
 	"net/netip"
 
@@ -124,17 +125,25 @@ func (nd *Decoder) decodeRecord(version uint16, obsDomainID uint32, samplingRate
 
 		// L3
 		case netflow.IPFIX_FIELD_sourceIPv4Address:
-			etype = helpers.ETypeIPv4
-			bf.SrcAddr = decodeIPFromBytes(v)
+			if !isAllZeroIP(v) {
+				etype = helpers.ETypeIPv4
+				bf.SrcAddr = decodeIPFromBytes(v)
+			}
 		case netflow.IPFIX_FIELD_destinationIPv4Address:
-			etype = helpers.ETypeIPv4
-			bf.DstAddr = decodeIPFromBytes(v)
+			if !isAllZeroIP(v) {
+				etype = helpers.ETypeIPv4
+				bf.DstAddr = decodeIPFromBytes(v)
+			}
 		case netflow.IPFIX_FIELD_sourceIPv6Address:
-			etype = helpers.ETypeIPv6
-			bf.SrcAddr = decodeIPFromBytes(v)
+			if !isAllZeroIP(v) {
+				etype = helpers.ETypeIPv6
+				bf.SrcAddr = decodeIPFromBytes(v)
+			}
 		case netflow.IPFIX_FIELD_destinationIPv6Address:
-			etype = helpers.ETypeIPv6
-			bf.DstAddr = decodeIPFromBytes(v)
+			if !isAllZeroIP(v) {
+				etype = helpers.ETypeIPv6
+				bf.DstAddr = decodeIPFromBytes(v)
+			}
 		case netflow.IPFIX_FIELD_sourceIPv4PrefixLength, netflow.IPFIX_FIELD_sourceIPv6PrefixLength:
 			bf.SrcNetMask = uint8(decodeUNumber(v))
 		case netflow.IPFIX_FIELD_destinationIPv4PrefixLength, netflow.IPFIX_FIELD_destinationIPv6PrefixLength:
@@ -164,6 +173,14 @@ func (nd *Decoder) decodeRecord(version uint16, obsDomainID uint32, samplingRate
 			bf.InIf = uint32(decodeUNumber(v))
 		case netflow.IPFIX_FIELD_egressInterface:
 			bf.OutIf = uint32(decodeUNumber(v))
+		case netflow.IPFIX_FIELD_ingressPhysicalInterface:
+			if bf.InIf == 0 {
+				bf.InIf = uint32(decodeUNumber(v))
+			}
+		case netflow.IPFIX_FIELD_egressPhysicalInterface:
+			if bf.OutIf == 0 {
+				bf.OutIf = uint32(decodeUNumber(v))
+			}
 
 		// RFC7133: process it later to not override other fields
 		case netflow.IPFIX_FIELD_dataLinkFrameSize:
@@ -214,10 +231,14 @@ func (nd *Decoder) decodeRecord(version uint16, obsDomainID uint32, samplingRate
 			if !nd.d.Schema.IsDisabled(schema.ColumnGroupL2) {
 				// L2
 				switch field.Type {
-				case netflow.IPFIX_FIELD_vlanId:
-					bf.SrcVlan = uint16(decodeUNumber(v))
-				case netflow.IPFIX_FIELD_postVlanId:
-					bf.DstVlan = uint16(decodeUNumber(v))
+				case netflow.IPFIX_FIELD_vlanId, netflow.IPFIX_FIELD_dot1qVlanId:
+					if bf.SrcVlan == 0 {
+						bf.SrcVlan = uint16(decodeUNumber(v))
+					}
+				case netflow.IPFIX_FIELD_postVlanId, netflow.IPFIX_FIELD_postDot1qVlanId:
+					if bf.DstVlan == 0 {
+						bf.DstVlan = uint16(decodeUNumber(v))
+					}
 				case netflow.IPFIX_FIELD_sourceMacAddress:
 					bf.AppendUint(schema.ColumnSrcMAC, decodeUNumber(v))
 				case netflow.IPFIX_FIELD_destinationMacAddress:
@@ -307,29 +328,26 @@ func (nd *Decoder) decodeRecord(version uint16, obsDomainID uint32, samplingRate
 }
 
 func decodeUNumber(b []byte) uint64 {
-	var o uint64
 	l := len(b)
 	switch l {
 	case 1:
-		o = uint64(b[0])
+		return uint64(b[0])
 	case 2:
-		o = uint64(binary.BigEndian.Uint16(b))
+		return uint64(b[1]) | uint64(b[0])<<8
+	case 3:
+		return uint64(b[2]) | uint64(b[1])<<8 | uint64(b[0])<<16
 	case 4:
-		o = uint64(binary.BigEndian.Uint32(b))
+		return uint64(b[3]) | uint64(b[2])<<8 | uint64(b[1])<<16 | uint64(b[0])<<24
+	case 5:
+		return uint64(b[4]) | uint64(b[3])<<8 | uint64(b[2])<<16 | uint64(b[1])<<24 | uint64(b[0])<<32
+	case 6:
+		return uint64(b[5]) | uint64(b[4])<<8 | uint64(b[3])<<16 | uint64(b[2])<<24 | uint64(b[1])<<32 | uint64(b[0])<<40
+	case 7:
+		return uint64(b[6]) | uint64(b[5])<<8 | uint64(b[4])<<16 | uint64(b[3])<<24 | uint64(b[2])<<32 | uint64(b[1])<<40 | uint64(b[0])<<48
 	case 8:
-		o = binary.BigEndian.Uint64(b)
-	default:
-		if l < 8 {
-			var iter uint
-			for i := range b {
-				o |= uint64(b[i]) << uint(8*(uint(l)-iter-1))
-				iter++
-			}
-		} else {
-			return 0
-		}
+		return binary.BigEndian.Uint64(b)
 	}
-	return o
+	return 0
 }
 
 func decodeIPFromBytes(b []byte) netip.Addr {
@@ -337,6 +355,16 @@ func decodeIPFromBytes(b []byte) netip.Addr {
 		return netip.AddrFrom16(ip.As16())
 	}
 	return netip.Addr{}
+}
+
+var (
+	allZeroIPv4Bytes = netip.MustParseAddr("0.0.0.0").AsSlice()
+	allZeroIPv6Bytes = netip.MustParseAddr("::").AsSlice()
+)
+
+func isAllZeroIP(b []byte) bool {
+	return len(b) == 4 && bytes.Equal(b, allZeroIPv4Bytes) ||
+		len(b) == 16 && bytes.Equal(b, allZeroIPv6Bytes)
 }
 
 func decodeIPFromUint32(ipv4 uint32) netip.Addr {

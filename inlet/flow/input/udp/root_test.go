@@ -5,6 +5,7 @@ package udp
 
 import (
 	"net"
+	"strconv"
 	"testing"
 	"time"
 
@@ -36,7 +37,7 @@ func TestUDPInput(t *testing.T) {
 		}
 
 		// Check metrics
-		gotMetrics := r.GetMetrics("akvorado_inlet_flow_input_udp_")
+		gotMetrics := r.GetMetrics("akvorado_inlet_flow_input_udp_", "-buffer_size")
 		expectedMetrics := map[string]string{
 			`bytes_total{exporter="127.0.0.1",listener="127.0.0.1:0",worker="0"}`:                "12",
 			`packets_total{exporter="127.0.0.1",listener="127.0.0.1:0",worker="0"}`:              "1",
@@ -52,21 +53,13 @@ func TestUDPInput(t *testing.T) {
 		}
 
 		close(done)
-
 	}
 
 	in, err := configuration.New(r, daemon.NewMock(t), send)
 	if err != nil {
 		t.Fatalf("New() error:\n%+v", err)
 	}
-	if err := in.Start(); err != nil {
-		t.Fatalf("Start() error:\n%+v", err)
-	}
-	defer func() {
-		if err := in.Stop(); err != nil {
-			t.Fatalf("Stop() error:\n%+v", err)
-		}
-	}()
+	helpers.StartStop(t, in)
 
 	// Connect
 	conn, err := net.Dial("udp", in.(*Input).address.String())
@@ -84,5 +77,38 @@ func TestUDPInput(t *testing.T) {
 	case <-time.After(20 * time.Millisecond):
 		t.Fatal("no decoded flows received")
 	case <-done:
+	}
+}
+
+func TestUDPReceiveBuffer(t *testing.T) {
+	// Without setting receive buffer
+	r := reporter.NewMock(t)
+	configuration := DefaultConfiguration().(*Configuration)
+	configuration.Listen = "127.0.0.1:0"
+	in, err := configuration.New(r, daemon.NewMock(t), func(string, *pb.RawFlow) {})
+	if err != nil {
+		t.Fatalf("New() error:\n%+v", err)
+	}
+	helpers.StartStop(t, in)
+	gotMetrics := r.GetMetrics("akvorado_inlet_flow_input_udp_", "buffer_size")
+	bufferSize := gotMetrics[`buffer_size_bytes{listener="127.0.0.1:0",worker="0"}`]
+	bufferSize1, _ := strconv.ParseFloat(bufferSize, 32)
+
+	// While setting receive buffer
+	r = reporter.NewMock(t)
+	configuration = DefaultConfiguration().(*Configuration)
+	configuration.Listen = "127.0.0.1:0"
+	configuration.ReceiveBuffer = 100_000_000
+	in, err = configuration.New(r, daemon.NewMock(t), func(string, *pb.RawFlow) {})
+	if err != nil {
+		t.Fatalf("New() error:\n%+v", err)
+	}
+	helpers.StartStop(t, in)
+	gotMetrics = r.GetMetrics("akvorado_inlet_flow_input_udp_", "buffer_size")
+	bufferSize = gotMetrics[`buffer_size_bytes{listener="127.0.0.1:0",worker="0"}`]
+	bufferSize2, _ := strconv.ParseFloat(bufferSize, 32)
+
+	if bufferSize2 < bufferSize1 {
+		t.Fatalf("Buffer size was unchanged (%f <= %f)", bufferSize1, bufferSize2)
 	}
 }

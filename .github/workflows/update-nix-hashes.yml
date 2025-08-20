@@ -1,0 +1,43 @@
+---
+name: Update Nix dependency hashes
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "46 3 * * *"
+
+jobs:
+  hashes:
+    name: Update dependency hashes
+    runs-on: ubuntu-latest
+    if: github.repository_owner == 'akvorado'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # All history needed
+      - name: Check for changes
+        id: check-changes
+        if: github.event_name == 'schedule'
+        run: |
+          LOCKFILES="go.sum console/frontend/package-lock.json"
+          LAST_CHANGE=$(git log -1 --format=%ct -- $LOCKFILES)
+          CURRENT_TIME=$(date +%s)
+          ONE_HOUR_AGO=$((CURRENT_TIME - 3600))
+          LONG_TIME_AGO=$((CURRENT_TIME - 181440))
+          echo "Last change was $(( (CURRENT_TIME - LAST_CHANGE) / 60 )) minutes ago"
+          if [ "$LAST_CHANGE" -gt "$LONG_TIME_AGO" ] && [ "$LAST_CHANGE" -le "$ONE_HOUR_AGO" ]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi
+      - uses: cachix/install-nix-action@v31
+        if: github.event_name != 'schedule' || steps.check-changes.outputs.should_run == 'true'
+      - name: Update dependency hashes
+        if: github.event_name != 'schedule' || steps.check-changes.outputs.should_run == 'true'
+        run: nix run .#update
+      - name: Push update
+        if: github.event_name != 'schedule' || steps.check-changes.outputs.should_run == 'true'
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add flake.lock nix
+          ! git commit -m "build: update Nix dependency hashes" || git push

@@ -1,9 +1,13 @@
 # Configuration
 
 The orchestrator service is configured through YAML files (shipped in the
-`config/` directory) and includes the configuration of the other services. Other
-services are expected to query the orchestrator through HTTP on start to
-retrieve their configuration.
+`config/` directory) and includes the configuration of the other services.
+
+> [!TIP]
+> Other services query the orchestrator through HTTP on start to retrieve their
+> configuration. This means that if you change the configuration for one
+> service, you always need to restart the orchestrator first, then the service
+> whose configuration has changed.
 
 The default configuration can be obtained with `docker compose exec
 akvorado-orchestrator akvorado orchestrator --dump --check /dev/null`. Note that
@@ -149,11 +153,19 @@ keys are accepted:
   configuration for the [orchestrator service](#kafka-2) (the values of these
   keys are copied from the orchestrator configuration, unless `brokers` is
   explicitly set)
-- `workers` defines the number of Kafka workers to use
 - `consumer-group` defines the consumer group ID for Kafka consumption
 - `fetch-min-bytes` defines the minimum number of bytes to fetch from Kafka
 - `fetch-max-wait-time` defines how much maximum time to wait for the minimum
   number of bytes to become available
+- `min-workers` defines the minimum number of Kafka workers to use
+- `max-workers` defines the maximum number of Kafka workers to use
+- `worker-increase-rate-limit` defines the duration before increasing the number of workers
+- `worker-decrease-rate-limit` defines the duration before decreasing the number of workers
+
+The exact number of workers currently running depend on the load ClickHouse
+component. The number of workers will be adjusted to keep it below
+`maximum-batch-size`. Don't crank up too much the `max-workers` setting as it
+can put pressure on ClickHouse (the default of 8 should be OK).
 
 ### Routing
 
@@ -183,6 +195,8 @@ For the BMP provider, the following keys are accepted:
   not supported)
 - `keep` tells how much time the routes sent from a terminated BMP
   connection should be kept
+- `receive-buffer` is the size of the kernel receive buffer in bytes for each
+  established BMP connection
 
 If you are not interested in AS paths and communities, disabling them
 will decrease the memory usage of *Akvorado*, as well as the disk
@@ -202,6 +216,11 @@ routing:
     collect-aspaths: true
     collect-communities: false
 ```
+
+> [!NOTE]
+> With many routes, BMP may have some performance issues when a peer disappear.
+> If you are not interested by full accuracy, limit the number of BMP peers and
+> export the LocRIB. These issues will eventually be sorted out.
 
 #### BioRIS provider
 
@@ -589,6 +608,20 @@ exporter-classifiers:
 
 [expr]: https://expr-lang.org/docs/language-definition
 [from Go]: https://github.com/google/re2/wiki/Syntax
+
+### ClickHouse
+
+The ClickHouse component pushes data to ClickHouse. There are two settings that
+are configurable:
+
+- `maximum-batch-size` defines how many flows to send to ClickHouse in a single batch at most
+- `minimum-wait-time` defines how long to wait before sending an incomplete batch
+
+These numbers are per-worker (as defined in the Kafka component). A worker will
+send a batch of size at most `maximum-batch-size` at least every
+`maximum-wait-time`. ClickHouse is more efficient when the batch size is large.
+The default value is 100 000 and allows ClickHouse to handle incoming flows
+efficiently.
 
 ## Orchestrator service
 

@@ -3,7 +3,10 @@
 While Akvorado itself does not require much memory and disk space, both Kafka
 and ClickHouse have heavier needs. To get started, do not try to run the
 complete setup with less than 16 GB of RAM (32 GB or more is advised) and with
-less than 50 GB of disk (100 GB or more is advised). Use at least 8 vCPU.
+less than 50 GB of disk (100 GB or more is advised). Use at least 8 vCPUs.
+
+`demo.akvorado.net` is currently running in a VM with 4 vCPUs, 100 GB of disk
+and 8 GB of RAM, but it uses a 4 GB of swap.
 
 ## Router configuration
 
@@ -520,36 +523,84 @@ if you want to enable TLS for a more secure setup.
 
 ### GNU/Linux
 
-#### pmacctd
+#### pmacct
 
-Configure pmacctd with sFlow receiver:
+[pmacct](http://www.pmacct.net/) is a set of multi-purpose passive network
+monitoring tools, including an sFlow exporter.
+
+Put the following configuration in `/etc/pmacctd/config.conf`. Replace
+`akvorado-inlet-receiver` with the appropriate IP:
+
 ```yaml
-/etc/pmacctd/config.conf: |
-  daemonize: false
-  plugins: sfprobe[any]
-  sfprobe_receiver: akvorado-inlet-receiver-replace-me:6343
-  aggregate: src_host,dst_host,in_iface,out_iface,src_port,dst_port,proto
-  pcap_ifindex: map
-  pcap_interfaces_map: /etc/pmacctd/interfaces.map
-  pcap_interface_wait: true
-  sfprobe_agentsubid: 1402
-  sampling_rate: 1000
-  snaplen: 128
-/etc/pmacctd/interfaces.map: |
-  ifindex=1 ifname=lo direction=in
-  ifindex=1 ifname=lo direction=out
-  ifindex=3 ifname=eth0 direction=in
-  ifindex=3 ifname=eth0 direction=out
-  ifindex=4 ifname=eth1 direction=in
-  ifindex=4 ifname=eth1 direction=out
+daemonize: false
+plugins: sfprobe[any]
+sfprobe_receiver: akvorado-inlet-receiver:6343
+aggregate: src_host,dst_host,in_iface,out_iface,src_port,dst_port,proto
+pcap_ifindex: map
+pcap_interfaces_map: /etc/pmacctd/interfaces.map
+pcap_interface_wait: true
+sfprobe_agentsubid: 1402
+sampling_rate: 1000
+snaplen: 128
 ```
 
-Here we set the interface indexes manually entirely based on the interface
-names and completely ignoring the kernel ifIndex for the flows. pmacctd can
-be run inside containers where SNMPd does not return descriptions for the
-interfaces, which is a required field for the flow. With this setup, you can
-make use of the static metadata provider to match the exporter and accept the
-flow for further classification.
+In `/etc/pmacctd/interfaces.map`, adapt the following snippet to your setup:
+
+```ini
+ifindex=1 ifname=lo direction=in
+ifindex=1 ifname=lo direction=out
+ifindex=3 ifname=eth0 direction=in
+ifindex=3 ifname=eth0 direction=out
+ifindex=4 ifname=eth1 direction=in
+ifindex=4 ifname=eth1 direction=out
+```
+
+We set the interface indexes manually entirely based on the interface names to
+avoid running an SNMP daemon. Use the static metadata provider to match the
+exporter and provide interface names and descriptions to Akvorado:
+
+```yaml
+inlet:
+  providers:
+    - type: static
+      exporters:
+        2001:db8:1::1:
+          name: exporter1
+          ifindexes:
+            3:
+              name: eth0
+              description: PNI Google
+              speed: 10000
+            4:
+              name: eth1
+              description: PNI Netflix
+              speed: 10000
+```
+
+#### ipfixprobe
+
+[ipfixprobe](https://ipfixprobe.cesnet.cz/) is a modular IPFIX flow exporter. I
+supports both a `pcap` plugin for low bandwidth use (less than 1 Gbps) and a
+`dpdk` plugin to support 100 Gbps or more.
+
+Here is an invocation example for the `pcap` plugin:
+
+```sh
+ipfixprobe \
+  -i "pcap;ifc=eth0;snaplen=128" \
+  -s "cache;active=5;inactive=5" \
+  -o "ipfix;host=akvorado-inlet-receiver;port=2055;udp;id=1;dir=1"
+```
+
+You need to run one `ipfixprobe` instance for each interface. Each interface
+should have its own `id` and `dir`. As for *pmacct*, use the static metadata
+provider to provide interface names and descriptions to Akvorado.
+
+> [!WARNING]
+> Until Akvorado supports bidirectional flows (RFC 5103), only incoming flows
+> are correctly accounted for. The `split` option for the cache plugin would
+> help to account for both directions, but the input interface would be
+> incorrect for outgoing flows.
 
 ## Kafka
 
@@ -563,6 +614,10 @@ While ClickHouse works pretty well out-of-the-box, it is still
 encouraged to read [its documentation](https://clickhouse.com/docs/).
 Altinity also provides a [knowledge base](https://kb.altinity.com/)
 with various other tips.
+
+> [!TIP]
+> To connect to the ClickHouse database in the Docker Compose setup, use `docker
+> compose exec clickhouse clickhouse-client`.
 
 ### System tables
 
@@ -595,6 +650,10 @@ The `networks` dictionary can take a bit of memory. You can check with the follo
 SELECT name, status, type, formatReadableSize(bytes_allocated)
 FROM system.dictionaries
 ```
+
+Moreover, ClickHouse is tuned for 32 GB of RAM or more. ClickHouse documentation
+has some tips to [run with 16 GB or
+less](https://clickhouse.com/docs/operations/tips#using-less-than-16gb-of-ram).
 
 ### Space usage
 
@@ -667,14 +726,25 @@ WHERE (database = 'system') AND match(name, '_[0-9]+$')
 FORMAT TSVRaw
 ```
 
-### Slow queries
+### CPU usage
 
-You can extract slow queries with:
+If ClickHouse has a high CPU usage, you can extract slow queries with:
 
 ```sql
 SELECT formatReadableTimeDelta(query_duration_ms/1000) AS duration, query
 FROM system.query_log
 WHERE query_kind = 'Select'
+ORDER BY query_duration_ms DESC
+LIMIT 10
+FORMAT Vertical
+```
+
+Also check slow inserts:
+
+```sql
+SELECT formatReadableTimeDelta(query_duration_ms/1000) AS duration, query
+FROM system.query_log
+WHERE query_kind = 'Insert'
 ORDER BY query_duration_ms DESC
 LIMIT 10
 FORMAT Vertical
@@ -696,3 +766,211 @@ drop the following tables:
 - any `flows_XXXXXvN_raw` and `flows_XXXXXvN_raw_consumer` when another table exists with a higher `N` value
 
 These tables do not contain data. If you make a mistake, you can restart the orchestrator to recreate them.
+
+### Update the database schema
+
+In 1.10.0, the primary key of the `flows` table was changed to improve
+performance. This update is not automatically applied on existing installations
+as it requires copying data around. You can check if your schema needs to be
+updated with the following SQL command:
+
+```sql
+SELECT primary_key
+FROM system.tables
+WHERE (name = 'flows') AND (database = currentDatabase())
+```
+
+If the primary key starts with `TimeReceived` instead of
+`toStartOfFiveMinutes(TimeReceived)`, you are using the old schema and you may
+get better performance by switching to the new one.
+
+The idea is to create a new table and transfer the data from the old table,
+partition by partition. Execute the following request and ensure you have
+enough room to store the largest partition:
+
+```sql
+SELECT
+    partition,
+    formatReadableSize(sum(bytes_on_disk)) AS size,
+    count() AS count
+FROM system.parts
+WHERE (database = currentDatabase()) AND (`table` = 'flows') AND active
+GROUP BY partition
+ORDER BY partition ASC
+```
+
+> [!IMPORTANT]
+> There is a risk of data loss if something goes wrong. Backup your data if you
+> care about them. This guide only covers the non-clustered scenario.
+
+#### Preparation
+
+You need to stop the **outlet** service to ensure nothing is writing to
+ClickHouse while the migration is in progress. Get the current parameters for
+the `flows` table:
+
+```sql
+SELECT engine_full
+FROM system.tables
+WHERE (database = currentDatabase()) AND (`table` = 'flows')
+FORMAT TSVRaw
+```
+
+You need to change the `ORDER BY` directive to replace `TimeReceived` by
+`toStartOfFiveMinutes(TimeReceived)`. You should get something like that:
+
+```
+MergeTree PARTITION BY toYYYYMMDDhhmmss(toStartOfInterval(TimeReceived, toIntervalSecond(25920))) ORDER BY (toStartOfFiveMinutes(TimeReceived), ExporterAddress, InIfName, OutIfName) TTL TimeReceived + toIntervalSecond(1296000) SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
+```
+
+Also, check the current number of flows stored in ClickHouse:
+
+```sql
+SELECT count(*)
+FROM flows
+```
+
+#### Rename the old table
+
+Rename the current `flows` table to `flows_old`:
+
+```sql
+RENAME TABLE flows TO flows_old
+```
+
+#### Create the new table
+
+Allow suspicious low cardinality types:
+
+```sql
+SET allow_suspicious_low_cardinality_types = true
+```
+
+Create the new `flows` table with the updated `ORDER BY` directive. After
+`ENGINE = `, copy/paste the engine definition you prepared earlier:
+
+```sql
+CREATE TABLE flows AS flows_old
+ENGINE =
+```
+
+#### Create an intermediate table
+
+Create an intermediate table to copy data to. This is needed to not duplicate
+data in the aggregated tables. Use the same engine definition as previously:
+
+```sql
+CREATE TABLE flows_temp AS flows_old
+ENGINE =
+```
+
+#### Generate the migration statements
+
+Use the following SQL query to create the migration
+
+```sql
+SELECT
+ concat('insert into flows_temp select * from flows_old where _partition_id = \'', partition_id, '\';\n',
+        'alter table flows_old drop partition \'', partition_id, '\';\n', 
+        'alter table flows attach partition id \'', partition, '\' from flows_temp;') AS cmd
+FROM system.parts
+WHERE (database = currentDatabase()) AND (`table` = 'flows_old')
+GROUP BY
+    database,
+    `table`,
+    partition_id,
+    partition
+ORDER BY partition_id ASC
+FORMAT TSVRaw
+```
+
+#### Execute the migration statements
+
+You can execute them one by one. You can check that you still have all the flows
+after each `attach partition` directive:
+
+```sql
+SELECT (
+        SELECT count(*)
+        FROM flows
+    ) + (
+        SELECT count(*)
+        FROM flows_old
+    )
+```
+
+#### Drop the old table
+
+The last step is to remove the empty `flows_old` table, as well as the
+intermediate table:
+
+```sql
+DROP TABLE flows_old;
+DROP TABLE flows_temp;
+```
+
+Then, you can restart the **outlet** service.
+
+## Docker
+
+The default Docker Compose setup is meant to get started quickly. However, you
+can keep it for production setup as well.
+
+### Composability
+
+The `.env` file selects the Docker Compose files that are assembled to have a
+complete setup. Look at the comments for some guidance. You should avoid to
+modify any existing files, except `docker/docker-compose-local.yml`, which
+should contain your local setup.
+
+This file can override parts of the configuration. The [merge
+rules](https://docs.docker.com/reference/compose-file/merge/) are a bit complex:
+the general rule of thumb is that scalars are replaced, while lists and mappings
+are merged. However, exceptions exist.
+
+> [!TIP]
+> Always check if the final configuration matches your expectations with `docker compose config`.
+
+You can disable some services by using profiles:
+
+```yaml
+services:
+  akvorado-inlet:
+    profiles: [ disabled ]
+```
+
+It is possible to remove a value with the `!reset` tag:
+
+```yaml
+services:
+  akvorado-outlet:
+    environment:
+      AKVORADO_CFG_OUTLET_METADATA_CACHEPERSISTFILE: !reset null
+```
+
+With Docker Compose v2.24.4 or later, it is possible to override a value:
+
+```yaml
+services:
+  traefik:
+    ports: !override
+      - 127.0.0.1:8080:8080/tcp
+      - 80:8081/tcp
+```
+
+The `docker/docker-compose-local.yml` file contains more examples you can adapt
+for your needs. You can also enable TLS by uncommenting the appropriate section
+in `.env`.
+
+### Networking
+
+The default setup comes with both IPv4 and IPv6 enabled, using the NAT setup.
+For IPv6 to work correctly, you either need Docker Engine v27, or you need to
+set `ip6tables` to `true` in `/etc/docker/daemon.json`.
+
+If you prefer to keep Docker default configuration, you can add this snippet to
+`docker/docker-compose-local.yml`:
+
+```yaml
+networks: !reset {}
+```

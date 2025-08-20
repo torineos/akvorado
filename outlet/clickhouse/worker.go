@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"time"
 
 	"github.com/ClickHouse/ch-go"
@@ -19,9 +20,21 @@ import (
 // Worker represents a worker sending to ClickHouse. It is synchronous (no
 // goroutines) and most functions are bound to a context.
 type Worker interface {
-	FinalizeAndSend(context.Context)
+	FinalizeAndSend(context.Context) WorkerStatus
 	Flush(context.Context)
 }
+
+// WorkerStatus tells if a worker is overloaded or not.
+type WorkerStatus int
+
+const (
+	// WorkerStatusOK tells the worker is operating in the correct range of efficiency.
+	WorkerStatusOK WorkerStatus = iota
+	// WorkerStatusOverloaded tells the worker has too much work and more worker would help.
+	WorkerStatusOverloaded
+	// WorkerStatusUnderloaded tells the worker do not have enough work.
+	WorkerStatusUnderloaded
+)
 
 // realWorker is a working implementation of Worker.
 type realWorker struct {
@@ -30,9 +43,10 @@ type realWorker struct {
 	last   time.Time
 	logger reporter.Logger
 
-	conn    *ch.Client
-	servers []string
-	options ch.Options
+	conn          *ch.Client
+	servers       []string
+	options       ch.Options
+	asyncSettings []ch.Setting
 }
 
 // NewWorker creates a new worker to push data to ClickHouse.
@@ -45,29 +59,68 @@ func (c *realComponent) NewWorker(i int, bf *schema.FlowMessage) Worker {
 
 		servers: servers,
 		options: opts,
+		asyncSettings: []ch.Setting{
+			{
+				Key:       "async_insert",
+				Value:     "1",
+				Important: true,
+			},
+			{
+				Key:       "wait_for_async_insert",
+				Value:     "1",
+				Important: true,
+			},
+			{
+				Key:   "async_insert_busy_timeout_max_ms",
+				Value: strconv.FormatUint(uint64(c.config.MaximumWaitTime.Milliseconds()), 10),
+			},
+		},
 	}
 	return &w
 }
 
-// FinalizeAndSend sends data to ClickHouse after finalizing if we have a full batch or exceeded the maximum wait time.
-func (w *realWorker) FinalizeAndSend(ctx context.Context) {
+// FinalizeAndSend sends data to ClickHouse after finalizing if we have a full
+// batch or exceeded the maximum wait time. See
+// https://clickhouse.com/docs/best-practices/selecting-an-insert-strategy for
+// tips on the insert strategy. Notably, we switch to async insert when the
+// batch size is too small.
+func (w *realWorker) FinalizeAndSend(ctx context.Context) WorkerStatus {
 	w.bf.Finalize()
 	now := time.Now()
-	if w.bf.FlowCount() >= int(w.c.config.MaximumBatchSize) || w.last.Add(w.c.config.MaximumWaitTime).Before(now) {
+	batchSize := w.bf.FlowCount()
+	waitTime := now.Sub(w.last)
+	if batchSize >= int(w.c.config.MaximumBatchSize) || waitTime >= w.c.config.MaximumWaitTime {
 		// Record wait time since last send
 		if !w.last.IsZero() {
 			waitTime := now.Sub(w.last)
 			w.c.metrics.waitTime.Observe(waitTime.Seconds())
 		}
 		w.Flush(ctx)
-		w.last = now
+		w.last = time.Now()
+		if uint(batchSize) >= w.c.config.MaximumBatchSize {
+			w.c.metrics.overloaded.Inc()
+			return WorkerStatusOverloaded
+		} else if uint(batchSize) <= w.c.config.MaximumBatchSize/minimumBatchSizeDivider {
+			w.c.metrics.underloaded.Inc()
+			return WorkerStatusUnderloaded
+		}
 	}
+	return WorkerStatusOK
 }
 
 // Flush sends remaining data to ClickHouse without an additional condition. It
 // should be called before shutting down to flush remaining data. Otherwise,
 // FinalizeAndSend() should be used instead.
 func (w *realWorker) Flush(ctx context.Context) {
+	if w.bf.FlowCount() == 0 {
+		return
+	}
+	// Async mode if have not a big batch size
+	var settings []ch.Setting
+	if uint(w.bf.FlowCount()) <= w.c.config.MaximumBatchSize/minimumBatchSizeDivider {
+		settings = w.asyncSettings
+	}
+
 	// We try to send as long as possible. The only exit condition is an
 	// expiration of the context.
 	b := backoff.NewExponentialBackOff()
@@ -84,17 +137,17 @@ func (w *realWorker) Flush(ctx context.Context) {
 		// Send to ClickHouse in flows_XXXXX_raw.
 		start := time.Now()
 		if err := w.conn.Do(ctx, ch.Query{
-			Body:  w.bf.ClickHouseProtoInput().Into(fmt.Sprintf("flows_%s_raw", w.c.d.Schema.ClickHouseHash())),
-			Input: w.bf.ClickHouseProtoInput(),
+			Body:     w.bf.ClickHouseProtoInput().Into(fmt.Sprintf("flows_%s_raw", w.c.d.Schema.ClickHouseHash())),
+			Input:    w.bf.ClickHouseProtoInput(),
+			Settings: settings,
 		}); err != nil {
-			w.logger.Err(err).Msg("cannot send batch to ClickHouse")
+			w.logger.Err(err).Int("flows", w.bf.FlowCount()).Msg("cannot send batch to ClickHouse")
 			w.c.metrics.errors.WithLabelValues("send").Inc()
 			return err
 		}
 		pushDuration := time.Since(start)
 		w.c.metrics.insertTime.Observe(pushDuration.Seconds())
-		w.c.metrics.batches.Inc()
-		w.c.metrics.flows.Add(float64(w.bf.FlowCount()))
+		w.c.metrics.flows.Observe(float64(w.bf.FlowCount()))
 
 		// Clear batch
 		w.bf.Clear()

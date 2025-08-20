@@ -8,8 +8,10 @@ package bmp
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/benbjohnson/clock"
@@ -25,7 +27,7 @@ type Provider struct {
 	d           *Dependencies
 	t           tomb.Tomb
 	config      Configuration
-	acceptedRDs map[uint64]struct{}
+	acceptedRDs map[RD]struct{}
 	active      atomic.Bool
 
 	address net.Addr
@@ -34,7 +36,6 @@ type Provider struct {
 	// RIB management with peers
 	rib               *rib
 	peers             map[peerKey]*peerInfo
-	peerRemovalChan   chan peerKey
 	lastPeerReference uint32
 	staleTimer        *clock.Timer
 	mu                sync.RWMutex
@@ -53,14 +54,13 @@ func (configuration Configuration) New(r *reporter.Reporter, dependencies Depend
 		d:      &dependencies,
 		config: configuration,
 
-		rib:             newRIB(),
-		peers:           make(map[peerKey]*peerInfo),
-		peerRemovalChan: make(chan peerKey, configuration.RIBPeerRemovalMaxQueue),
+		rib:   newRIB(),
+		peers: make(map[peerKey]*peerInfo),
 	}
 	if len(p.config.RDs) > 0 {
-		p.acceptedRDs = make(map[uint64]struct{})
+		p.acceptedRDs = make(map[RD]struct{})
 		for _, rd := range p.config.RDs {
-			p.acceptedRDs[uint64(rd)] = struct{}{}
+			p.acceptedRDs[rd] = struct{}{}
 		}
 	}
 	p.staleTimer = p.d.Clock.AfterFunc(time.Hour, p.removeStalePeers)
@@ -79,9 +79,6 @@ func (p *Provider) Start() error {
 	}
 	p.address = listener.Addr()
 
-	// Peer removal
-	p.t.Go(p.peerRemovalWorker)
-
 	// Listener
 	p.t.Go(func() error {
 		for {
@@ -92,9 +89,39 @@ func (p *Provider) Start() error {
 				}
 				return nil
 			}
+			tcpConn := conn.(*net.TCPConn)
+			remote := conn.RemoteAddr().(*net.TCPAddr)
+			exporterIP, _ := netip.AddrFromSlice(remote.IP)
+			exporter := netip.AddrPortFrom(exporterIP, uint16(remote.Port))
+			exporterStr := exporter.Addr().Unmap().String()
+			if p.config.ReceiveBuffer > 0 {
+				if err := tcpConn.SetReadBuffer(int(p.config.ReceiveBuffer)); err != nil {
+					p.r.Warn().
+						Str("error", err.Error()).
+						Str("listen", p.config.Listen).
+						Msgf("unable to set requested TCP receive buffer size (%d bytes)", p.config.ReceiveBuffer)
+				}
+			}
+			// Verify the buffer size was actually set correctly
+			if syscallConn, err := tcpConn.SyscallConn(); err == nil {
+				var actualSize int
+				syscallConn.Control(func(fd uintptr) {
+					if val, err := syscall.GetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_RCVBUF); err == nil {
+						actualSize = val
+					}
+				})
+				p.metrics.bufferSize.WithLabelValues(exporterStr).Set(float64(actualSize))
+				if p.config.ReceiveBuffer > 0 && actualSize < int(p.config.ReceiveBuffer) {
+					p.r.Warn().
+						Str("listen", p.config.Listen).
+						Int("requested", int(p.config.ReceiveBuffer)).
+						Int("actual", actualSize).
+						Msg("TCP receive buffer size was capped by system limits (check net.core.rmem_max)")
+				}
+			}
 			p.active.Store(true)
 			p.t.Go(func() error {
-				return p.serveConnection(conn.(*net.TCPConn))
+				return p.serveConnection(tcpConn, exporter, exporterStr)
 			})
 		}
 	})
@@ -108,10 +135,7 @@ func (p *Provider) Start() error {
 
 // Stop stops the BMP provider.
 func (p *Provider) Stop() error {
-	defer func() {
-		close(p.peerRemovalChan)
-		p.r.Info().Msg("BMP component stopped")
-	}()
+	defer p.r.Info().Msg("BMP component stopped")
 	p.r.Info().Msg("stopping BMP component")
 	p.t.Kill(nil)
 	return p.t.Wait()

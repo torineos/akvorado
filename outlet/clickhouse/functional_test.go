@@ -114,23 +114,43 @@ func TestInsert(t *testing.T) {
 		var expectedMetrics map[string]string
 		if i < 11 {
 			expectedMetrics = map[string]string{
-				"batches_total": "1",
-				"flows_total":   "1",
+				`flow_per_batch_count`:            "1",
+				`flow_per_batch_sum`:              "1",
+				`flow_per_batch{quantile="0.5"}`:  "1",
+				`flow_per_batch{quantile="0.9"}`:  "1",
+				`flow_per_batch{quantile="0.99"}`: "1",
+				`worker_overloaded_total`:         "0",
+				`worker_underloaded_total`:        "1", // only the first one is "underloaded"
 			}
 		} else if i < 15 {
 			expectedMetrics = map[string]string{
-				"batches_total": "2",
-				"flows_total":   "11",
+				`flow_per_batch_count`:            "2",
+				`flow_per_batch_sum`:              "11",
+				`flow_per_batch{quantile="0.5"}`:  "1",
+				`flow_per_batch{quantile="0.9"}`:  "10",
+				`flow_per_batch{quantile="0.99"}`: "10",
+				`worker_overloaded_total`:         "1", // full batch size
+				`worker_underloaded_total`:        "1",
 			}
 		} else if i < 23 {
 			expectedMetrics = map[string]string{
-				"batches_total": "3",
-				"flows_total":   "15",
+				`flow_per_batch_count`:            "3",
+				`flow_per_batch_sum`:              "15",
+				`flow_per_batch{quantile="0.5"}`:  "4",
+				`flow_per_batch{quantile="0.9"}`:  "10",
+				`flow_per_batch{quantile="0.99"}`: "10",
+				`worker_overloaded_total`:         "1",
+				`worker_underloaded_total`:        "1",
 			}
 		} else {
 			expectedMetrics = map[string]string{
-				"batches_total": "4",
-				"flows_total":   "23",
+				`flow_per_batch_count`:            "4",
+				`flow_per_batch_sum`:              "23",
+				`flow_per_batch{quantile="0.5"}`:  "4",
+				`flow_per_batch{quantile="0.9"}`:  "10",
+				`flow_per_batch{quantile="0.99"}`: "10",
+				`worker_overloaded_total`:         "1",
+				`worker_underloaded_total`:        "1",
 			}
 		}
 		if diff := helpers.Diff(gotMetrics, expectedMetrics); diff != "" {

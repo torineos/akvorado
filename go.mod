@@ -4,18 +4,19 @@ go 1.24
 
 require (
 	github.com/ClickHouse/ch-go v0.67.0
-	github.com/ClickHouse/clickhouse-go/v2 v2.37.2
+	github.com/ClickHouse/clickhouse-go/v2 v2.40.1
 	github.com/alecthomas/chroma v0.10.0
 	github.com/benbjohnson/clock v1.3.5
 	github.com/bio-routing/bio-rd v0.1.10
-	github.com/bits-and-blooms/bitset v1.22.0
+	github.com/bits-and-blooms/bitset v1.24.0
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/chenyahui/gin-cache v1.10.0
-	github.com/docker/docker v28.3.2+incompatible
-	github.com/docker/go-connections v0.5.0
+	github.com/docker/docker v28.3.3+incompatible
+	github.com/docker/go-connections v0.6.0
 	github.com/eapache/go-resiliency v1.7.0
-	github.com/expr-lang/expr v1.17.5
+	github.com/expr-lang/expr v1.17.6
 	github.com/fsnotify/fsnotify v1.9.0
+	github.com/gaissmai/bart v0.24.0
 	github.com/gin-gonic/gin v1.10.1
 	github.com/glebarez/sqlite v1.11.0
 	github.com/go-playground/validator/v10 v10.20.0
@@ -26,7 +27,6 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.1.0
 	github.com/hashicorp/go-version v1.7.0
 	github.com/itchyny/gojq v0.12.17
-	github.com/kentik/patricia v1.2.1
 	github.com/kylelemons/godebug v1.1.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/netsampler/goflow2/v2 v2.2.3
@@ -36,26 +36,27 @@ require (
 	github.com/oschwald/maxminddb-golang/v2 v2.0.0-beta.8
 	github.com/osrg/gobgp/v3 v3.37.0
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10
-	github.com/prometheus/client_golang v1.22.0
+	github.com/prometheus/client_golang v1.23.0
 	github.com/rs/zerolog v1.34.0
 	github.com/scrapli/scrapligo v1.3.3
 	github.com/slayercat/GoSNMPServer v0.5.2
 	github.com/spf13/cobra v1.9.1
 	github.com/ti-mo/conntrack v0.5.2
 	github.com/twmb/franz-go v1.19.5
-	github.com/twmb/franz-go/pkg/kadm v1.16.0
+	github.com/twmb/franz-go/pkg/kadm v1.16.1
 	github.com/twmb/franz-go/pkg/kfake v0.0.0-20250711145744-a849b8be17b7
 	github.com/twmb/franz-go/pkg/kmsg v1.11.2
-	github.com/twmb/franz-go/plugin/kprom v1.2.1
+	github.com/twmb/franz-go/plugin/kprom v1.3.0
 	github.com/yuin/goldmark v1.7.12
 	github.com/yuin/goldmark-highlighting v0.0.0-20220208100518-594be1970594
 	go.uber.org/mock v0.5.2
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/sync v0.16.0
-	golang.org/x/sys v0.34.0
-	golang.org/x/text v0.27.0
+	golang.org/x/sys v0.35.0
+	golang.org/x/text v0.28.0
+	golang.org/x/time v0.12.0
 	google.golang.org/grpc v1.74.2
-	google.golang.org/protobuf v1.36.6
+	google.golang.org/protobuf v1.36.7
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.6.0
@@ -66,12 +67,10 @@ require (
 require (
 	cloud.google.com/go/compute/metadata v0.7.0 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
-	github.com/AlekSi/gocov-xml v1.1.0 // indirect
 	github.com/AlekSi/pointer v1.2.0 // indirect
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
-	github.com/andybalholm/brotli v1.1.1 // indirect
-	github.com/axw/gocov v1.2.1 // indirect
+	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bio-routing/tflow2 v0.0.0-20181230153523-2e308a4a3c3a // indirect
 	github.com/bitfield/gotestdox v0.2.2 // indirect
@@ -142,6 +141,7 @@ require (
 	github.com/mgechev/revive v1.7.0 // indirect
 	github.com/mna/pigeon v1.3.0 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
+	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
@@ -155,9 +155,9 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
-	github.com/prometheus/client_model v0.6.1 // indirect
-	github.com/prometheus/common v0.62.0 // indirect
-	github.com/prometheus/procfs v0.15.1 // indirect
+	github.com/prometheus/client_model v0.6.2 // indirect
+	github.com/prometheus/common v0.65.0 // indirect
+	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rs/xid v1.6.0 // indirect
@@ -186,11 +186,11 @@ require (
 	golang.org/x/arch v0.8.0 // indirect
 	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20231108232855-2478ac86f678 // indirect
-	golang.org/x/mod v0.25.0 // indirect
-	golang.org/x/net v0.41.0 // indirect
+	golang.org/x/mod v0.26.0 // indirect
+	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/term v0.33.0 // indirect
-	golang.org/x/time v0.12.0 // indirect
-	golang.org/x/tools v0.34.0 // indirect
+	golang.org/x/tools v0.35.0 // indirect
+	golang.org/x/tools/go/expect v0.1.1-deprecated // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250528174236-200df99c418a // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gotest.tools/gotestsum v1.12.1 // indirect
@@ -202,8 +202,6 @@ require (
 )
 
 tool (
-	github.com/AlekSi/gocov-xml
-	github.com/axw/gocov/gocov
 	github.com/dmarkham/enumer
 	github.com/frapposelli/wwhrd
 	github.com/mgechev/revive
@@ -215,5 +213,3 @@ tool (
 	gotest.tools/gotestsum
 	honnef.co/go/tools/cmd/staticcheck
 )
-
-replace github.com/kentik/patricia => github.com/netixx/patricia v0.0.0-20240221142110-a89b0dc418dd
